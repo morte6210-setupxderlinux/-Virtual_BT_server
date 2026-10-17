@@ -1,6 +1,7 @@
 {
   "name": "cf-backend",
   "type": "module",
+  "author": "setupxderlinux@gmail.com",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",

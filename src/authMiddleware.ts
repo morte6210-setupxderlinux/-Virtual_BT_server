@@ -83,7 +83,7 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
         const privateKey = await crypto.subtle.importKey(
           "pkcs8",
           pkBuffer,
-          { name: "RSA-OAEP", hash: "SHA-256" },
+          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
           true,
           ["decrypt"]
         );
@@ -93,7 +93,7 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
 
         // D. 執行解密
         const decryptedBuffer = await crypto.subtle.decrypt(
-          { name: "RSA-OAEP" },
+          { name: "RSASSA-PKCS1-v1_5" },
           privateKey,
           cipherBuffer
         );
