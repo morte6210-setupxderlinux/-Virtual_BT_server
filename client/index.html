@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>管理端登录</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body { width:100%;height:100vh;}
+        .main{
+            width:360px;
+            height:300px;
+            margin: 100px auto;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-direction: column;
+        }
+        .main>div{
+            width:100%;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            height:40px;
+        }
+        .main>div>p{
+            width:70px;
+            height:100%;
+            text-indent: 1em;
+            line-height: 40px;
+            font-weight: bold;
+        }
+        .main>div>input{
+            width:280px;
+            height:100%;
+            text-indent: 1em;
+            line-height: 40px;
+            border:1px solid #f38020;
+            border-radius: 5px;
+        }
+        .main>div>button{
+            background-color: #f38020;
+            color:#fff;
+            width:160px;
+            height:40px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div><p>用户：</p><input type="text"></div>
+        <div><p>密码：</p><input type="password"></div>
+        <!-- 2. 放置 Turnstile 驗證框 (請將 data-sitekey 換成你在 Cloudflare 申請的 Site Key) -->
+        <!--<div class="cf-turnstile" data-sitekey="你的_SITE_KEY"></div>-->
+        <div><button>登入</button><button>注册</button></div>
+    </div>
+    <script>
+        const inputvalue={username:"",password:"",token:""};
+        document.querySelector(".main>div:nth-child(1)>input").oninput=function(e){
+            inputvalue.username=this.value;
+        }
+        document.querySelector(".main>div:nth-child(2)>input").oninput=function(e){
+            inputvalue.password=this.value;
+        }
+        document.querySelector(".main>div:nth-child(3)>button:nth-child(2)").onclick=function(e){console.log(inputvalue)
+            /**
+            // 3. 取得 Turnstile 自動產生的 token
+            const turnstileInput = document.querySelector('[name="cf-turnstile-response"]');
+            const token = turnstileInput ? turnstileInput.value : '';
+
+            if (!token) {
+                alert('請先完成人機驗證！');
+                return;
+            }
+            inputvalue.token=token;
+            */
+            //if(inputvalue.username&&inputvalue.password&&inputvalue.token)fetch("http://127.0.0.1:8787/api/auth/register",{
+            if(inputvalue.username&&inputvalue.password)fetch("http://127.0.0.1:8787/api/auth/adminregister",{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json"
+                },
+                body:JSON.stringify(inputvalue)
+            }).then(response=>{
+                if(!response.ok){
+                    throw new Error(`HTTP 错误！状态码：${response.status}`)
+                }
+                return response.json();
+            }).then(data=>{
+                console.log(data,"2233");
+            }).catch(err=>{
+                console.log(err+"1122");
+            })
+        }
+        document.querySelector(".main>div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+            if(inputvalue.username&&inputvalue.password)fetch("http://127.0.0.1:8787/api/auth/login",{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json",
+                },
+                body:JSON.stringify(inputvalue)
+            }).then(response=>{
+                if(!response.ok){
+                    throw new Error(`HTTP 错误！状态码：${response.status}`)
+                }
+                return response.json();
+            }).then(data=>{
+                console.log(data,"2233");
+                //if(data.success)addkey(data.token,data.user.id);
+            }).catch(err=>{
+                console.log(err+"1122");
+            })
+        }
+    </script>
+</body>
+</html>

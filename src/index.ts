@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { jwt, sign } from 'hono/jwt'
 import {cors} from "hono/cors"
 import { securityMiddleware } from './securityMiddleware'
-import { authMiddleware } from './authMiddleware';
-
+import { authMiddleware } from './authMiddleware'; 
+import {adminconfig} from './config'
 type Bindings = {
   DB: D1Database
   BUCKET: R2Bucket
@@ -29,10 +29,271 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 app.use("/*", cors({
   origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization"],
+  allowHeaders: ["Content-Type", "Authorization","x-request-nonce","x-request-timestamp","x-signature"],
   credentials: true,
 }))
 
+// 抽離出初始化資料庫的共用函式
+async function initializeDatabase(db: D1Database) {
+  try {
+    // 1. 建立 users 表格
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        UUID TEXT UNIQUE NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    // 2. 建立 admin 表格 
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS admin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        publicid TEXT,
+        adminname TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    // 3. 建立 system_keys 表格（公共公私鑰）
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS system_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key_name TEXT UNIQUE NOT NULL,
+        public_keyE TEXT NOT NULL,
+        private_keyE TEXT NOT NULL,
+        public_keyF TEXT NOT NULL,
+        private_keyF TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+
+    // 3. 建立 user_keys 表格（用户公私鑰）
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_keys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT UNIQUE NOT NULL,
+        public_keyD TEXT NOT NULL,
+        private_keyD TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    // 4. 建立 user_sign 表格（特征值签章，注意：原本 expires_at 後面缺少了逗號）
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_sign (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        usernum TEXT NOT NULL,
+        UUID TEXT NOT NULL,
+        expires TEXT NOT NULL,
+        type TEXT NOT NULL,
+        signature TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    // 5. 防重放 Nonce 表
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS request_nonces (
+          nonce TEXT PRIMARY KEY,
+          created_at INTEGER NOT NULL
+      );
+    `).run();
+
+    // 6. IP 頻率限制表
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS ip_rate_limits (
+          ip TEXT PRIMARY KEY,
+          request_count INTEGER NOT NULL,
+          window_start INTEGER NOT NULL,
+          blocked_until INTEGER DEFAULT 0
+      );
+    `).run();
+
+    // 7. ADlink表格 (注意：expritime 後面補上了逗號)
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS ADlink (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          usernum TEXT NOT NULL,
+          urlId TEXT NOT NULL,
+          title TEXT NOT NULL,
+          xuhao TEXT NOT NULL,
+          postname TEXT NOT NULL,
+          linkUrl TEXT NOT NULL,
+          expritime DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+
+    // 8. custemail表格
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS custemail (
+          publicid TEXT,
+          emailaunot TEXT,
+          custcode TEXT,
+          pubaunot TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+
+    // 9. member_start表格 (修正了你原本拼寫錯誤的 member_start)
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS member_start (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `).run();
+
+    // 10. items圖片文件鏈接表格
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          usernum INTEGER NOT NULL,
+          title INTEGER NOT NULL,
+          content INTEGER NOT NULL,
+          file_key INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+
+    console.log('Database tables initialized successfully!');
+  } catch (err: any) {
+    console.error('Failed to initialize database:', err.message);
+  }
+}
+// 輔助函式：將 ArrayBuffer 轉換為標準 PEM 格式字串
+function formatPem(buffer:ArrayBuffer, label:string) {
+    const bytes=new Uint8Array(buffer);
+    let binary="";
+    for(let i=0;i<bytes.byteLength;i++){
+      binary+=String.fromCharCode(bytes[i]);
+    }
+
+    const base64 = btoa(binary);
+    const chunks = base64.match(/.{1,64}/g) || [];
+    return `-----BEGIN ${label}-----\n${chunks.join('\n')}\n-----END ${label}-----`;
+}
+//生成公用密钥
+async function addkeyendesign(db: D1Database){
+  try{
+        const query = 'SELECT * FROM system_keys WHERE key_name = ? ORDER BY created_at DESC'
+        const res = await db.prepare(query)
+          .bind("default")
+          .all()
+        
+        if(res.results.length<1||!res.results[0].public_keyF||!res.results[0].private_keyF||!res.results[0].public_keyE||!res.results[0].private_keyE){
+          const KeyPair2 = await crypto.subtle.generateKey(
+            {
+              name: "RSA-OAEP",
+              modulusLength: 2048,
+              publicExponent: new Uint8Array([1, 0, 1]),
+              hash: "SHA-256",
+            },
+            true,
+            ["encrypt", "decrypt"] // 宣告用途
+          ) as CryptoKeyPair;
+
+          // 2. 匯出公鑰 (spki 格式) 與私鑰 (pkcs8 格式)
+          const exportedPublicKeyE = await crypto.subtle.exportKey("spki", KeyPair2.publicKey);
+          const exportedPrivateKeyE = await crypto.subtle.exportKey("pkcs8", KeyPair2.privateKey);
+
+          // 3. 使用你的 formatPem 轉成標準 PEM 字串
+          const publicKeyPemE = formatPem(exportedPublicKeyE as ArrayBuffer, "PUBLIC KEY");
+          const privateKeyPemE = formatPem(exportedPrivateKeyE as ArrayBuffer, "PRIVATE KEY");
+
+          //
+          const KeyPair3 = await crypto.subtle.generateKey(
+            {
+              name: "RSA-OAEP",
+              modulusLength: 2048,
+              publicExponent: new Uint8Array([1, 0, 1]),
+              hash: "SHA-256",
+            },
+            true,
+            ["encrypt", "decrypt"] // 宣告用途
+          ) as CryptoKeyPair;
+
+          // 2. 匯出公鑰 (spki 格式) 與私鑰 (pkcs8 格式)
+          const exportedPublicKeyF = await crypto.subtle.exportKey("spki", KeyPair3.publicKey);
+          const exportedPrivateKeyF = await crypto.subtle.exportKey("pkcs8", KeyPair3.privateKey);
+
+          // 3. 使用你的 formatPem 轉成標準 PEM 字串
+          const publicKeyPemF = formatPem(exportedPublicKeyF as ArrayBuffer, "PUBLIC KEY");
+          const privateKeyPemF = formatPem(exportedPrivateKeyF as ArrayBuffer, "PRIVATE KEY");
+
+          const result_system = await db.prepare(
+            'INSERT INTO system_keys (key_name,public_keyE,private_keyE,public_keyF,private_keyF) VALUES (?,?,?,?,?)'
+          )
+          .bind("default",publicKeyPemE,privateKeyPemE,publicKeyPemF,privateKeyPemF)
+          .run()
+          return { success: true, id: result_system.meta.last_row_id}
+        }else{
+          return { success: false, data: "金钥已经存在" }
+        }
+    }catch(err:any){
+      return { 
+        success: false, 
+        error: err.message 
+      }
+    }
+}
+
+//生成管理员
+async function addadminname(db: D1Database){
+  const sysKeys: any = await db.prepare(
+      'SELECT * FROM system_keys WHERE key_name = ?'
+  ).bind('default').first();
+  if (!sysKeys||!sysKeys.public_keyF) {
+      return { error: 'key not found' }
+  }
+  const publicKeyPem = sysKeys.public_keyF as string;
+  const usernum=adminconfig.adminname;
+  // 檢查管理員是否已存在
+  const existing = await db.prepare('SELECT id FROM admin WHERE adminname = ?').bind(usernum).first();
+  if (existing) {
+    return { success: true, message: "管理員已存在，跳過建立" };
+  }
+  const password=adminconfig.password;
+  const encrypted=await encryptflare(publicKeyPem,password);
+  const result=await db.prepare(
+    'INSERT INTO admin (adminname, password,publicid) VALUES (?,?,?)'
+  )
+  .bind(usernum, encrypted,"758805")
+  .run()
+  return result
+}
+
+// 用一個全域變數確保在同一個 Worker 生命週期中只執行一次初始化
+let isInitialized = false;
+
+// 利用 Hono 的全域 Middleware，在收到第一個請求時自動觸發初始化（若尚未執行）
+app.use('*', async (c, next) => {
+  if (!isInitialized && c.env && c.env.DB) {
+    isInitialized = true;
+    // 非阻塞執行初始化，或者用 await 確保建好表才往下走
+    await initializeDatabase(c.env.DB);
+    await addkeyendesign(c.env.DB);
+    await addadminname(c.env.DB);
+  }
+  await next();
+});
 
 // 輔助函式：使用 Web Crypto API 對密碼進行 SHA-256 雜湊
 async function hashPassword(password: string): Promise<string> {
@@ -72,7 +333,7 @@ function encryptflare(pem: string,str: string): Promise<any> {
         const publicKey = await crypto.subtle.importKey(
           "spki",
           pkBuffer,
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          { name: "RSA-OAEP", hash: "SHA-256" },
           true,
           ["encrypt"]
         );
@@ -80,7 +341,7 @@ function encryptflare(pem: string,str: string): Promise<any> {
         const encodedMessage = new TextEncoder().encode(str);
         
         const ciphertext = await crypto.subtle.encrypt(
-          { name: "RSASSA-PKCS1-v1_5" },
+          { name: "RSA-OAEP" },
           publicKey,
           encodedMessage
         );
@@ -88,7 +349,7 @@ function encryptflare(pem: string,str: string): Promise<any> {
         // 將加密後的 ArrayBuffer 轉回 Base64 方便傳輸或檢視
         const base64Cipher = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
         resolve(base64Cipher);
-      } catch (err: any) {
+      } catch (err: any) {console.log(err)
         resolve(null);
       }
   });
@@ -138,7 +399,6 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
   }
   return bytes.buffer;
 }
-
 // 3. 解密
 function decryptflare(pem:string,ciphertextBase64: string): Promise<string | null> {
   return new Promise(async (resolve) => {
@@ -154,7 +414,7 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
         const privateKey = await crypto.subtle.importKey(
           "pkcs8",
           pkBuffer,
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          { name: "RSA-OAEP", hash: "SHA-256" },
           true,
           ["decrypt"]
         );
@@ -164,7 +424,7 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
 
         // D. 執行解密
         const decryptedBuffer = await crypto.subtle.decrypt(
-          { name: "RSASSA-PKCS1-v1_5" },
+          { name: "RSA-OAEP" },
           privateKey,
           cipherBuffer
         );
@@ -175,7 +435,6 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
     }
   });
 }
-
 //随机数
 function generateRandom6Digits(): string {
   // 建立一個長度為 1 的 Uint32Array 來存放亂數
@@ -187,133 +446,11 @@ function generateRandom6Digits(): string {
   return String(randomNum).padStart(6, '0');
 }
 
-//建表
-app.post('/api/public/init-db', securityMiddleware, async (c) => {
-  try {
-    // 建立 users 表格
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        UUID TEXT UNIQUE NOT NULL,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL
-      )
-    `).run();
-    // 建立 admin 表格
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS admin (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        publicid TEXT
-        adminname TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
-      )
-    `).run();
-
-    // 建立 system_keys 表格（公共公私鑰）
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS system_keys (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key_name TEXT UNIQUE NOT NULL, -- 例如命名為 'default' 或 'main'
-        public_keyD TEXT NOT NULL,
-        private_keyD TEXT NOT NULL,
-        public_keyE TEXT NOT NULL,
-        private_keyE TEXT NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `).run();
-
-    // 建立 user_sign 表格（特征值签章）
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS user_sign (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        usernum TEXT NOT NULL,
-        UUID TEXT NOT NULL,
-        expires TEXT NOT NULL,
-        type TEXT NOT NULL,
-        signature TEXT NOT NULL,
-        expires_at DATETIME NOT NULL
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `).run();
-
-    // 防重放 Nonce 表
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS request_nonces (
-          nonce TEXT PRIMARY KEY,
-          created_at INTEGER NOT NULL -- 儲存秒數時間戳
-      );
-    `).run();
-
-    //IP 頻率限制表
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS ip_rate_limits (
-          ip TEXT PRIMARY KEY,
-          request_count INTEGER NOT NULL,
-          window_start INTEGER NOT NULL, -- 窗口起始時間戳
-          blocked_until INTEGER DEFAULT 0 -- 如果被封鎖，解封的時間戳
-      );
-    `).run();
-
-    //ADlink表格
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS ADlink (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          usernum TEXT NOT NULL,
-          urlId TEXT NOT NULL,
-          title TEXT NOT NULL,
-          xuhao TEXT NOT NULL,
-          postname TEXT NOT NULL,
-          linkUrl TEXT NOT NULL,
-          expritime DATETIME
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `).run();
-
-    //custemail表格，emailauno联系邮箱{devpro:"",cust:""}，custcode社交{LINE:"",WHATSAPP:""}，pubaunot自媒体平台{X:{img,url},Y:{img,url},F:{img,url},T:{img,url}}
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS custemail (
-          publicid TEXT,
-          emailaunot TEXT,
-          custcode TEXT,
-          pubaunot TEXT,
-          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `).run();
-
-    //member_start表格
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS mbmber_start (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER NOT NULL,
-          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `).run();
-
-    //items图片文件链接表格,title文件名称，content查找标识，file_key链接
-    await c.env.DB.prepare(`
-      CREATE TABLE IF NOT EXISTS items (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          usernum INTEGER NOT NULL,
-          title INTEGER NOT NULL,
-          content INTEGER NOT NULL,
-          file_key INTEGER NOT NULL,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-    `).run();
-
-
-    return c.json({ success: true, message: 'Tables created successfully!' });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
-  }
-});
-
 // ----------------------------------------------------
 // 1. 公開路由 (Auth: 註冊與登入)
 // ----------------------------------------------------
 //使用 c.get() 取出中间件掛載的資料
-//const currentUser = c.get('user');
+//如：const currentUser = c.get('user');
 // 用戶註冊
 app.post('/api/auth/register', securityMiddleware, authMiddleware, async (c) => {
   /**
@@ -366,115 +503,43 @@ app.post('/api/auth/register', securityMiddleware, authMiddleware, async (c) => 
     return c.json({ error: 'Username already exists or database error' }, 400)
   }
 })
-//管理员注册
-app.post('/api/auth/adminregister', securityMiddleware, authMiddleware, async (c) => {
+//管理员修改密码
+app.post('/api/auth/adminrestart', securityMiddleware, authMiddleware, async (c) => {
   try {
     const usernum = c.get('usernum')
     const password=c.get("password")
-    if(!usernum||!password)return c.json({ error: 'Invalid adminname or password' },401)
+    const message=c.get("message")
+    if(!usernum||!password||!message||usernum!==adminconfig.adminname)return c.json({ error: 'Invalid adminname or password' },401)
+    const adminobj = await c.env.DB.prepare(
+        'SELECT * FROM admin WHERE publicid = ?'
+    ).bind('758805').first();
+    if(!adminobj)return c.json({ error: 'Invalid admin sql' },401)
     const sysKeys: any = await c.env.DB.prepare(
-      'SELECT * FROM system_keys WHERE key_name = ?'
-  ).bind('default').first();
-  if (!sysKeys||!sysKeys.public_keyD) {
-      return c.json({ error: 'key not found' }, 400)
-  }
-  const publicKeyPem = sysKeys.public_keyD as string;
-  const encrypted=await encryptflare(publicKeyPem,password);
-    const adminname: any = await c.env.DB.prepare(
-        'SELECT * FROM admin WHERE adminname = ?'
-    ).bind(usernum).first();
-    if (adminname) {
-        return c.json({ error: 'username is error' }, 400)
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind('default').first();
+    if (!sysKeys||!sysKeys.public_keyF||!sysKeys.private_keyF) {
+        return c.json({ error: 'key not found' }, 400)
     }
+    const privateKeyPem=sysKeys.private_keyF as string;
+    const adminpsw=adminobj.password as string;
+    const decrypted=await decryptflare(privateKeyPem,adminpsw);
+    if(decrypted!==password)return c.json({ error: 'Invalid password' },401)
+    const publicKeyPem = sysKeys.public_keyF as string;
+    const encrypted=await encryptflare(publicKeyPem,message);
     const result = await c.env.DB.prepare(
-      'INSERT INTO admin (adminname, password,publicid) VALUES (?,?,?)'
+      'UPDATE admin SET password = ? WHERE adminname = ?'
     )
-    .bind(usernum, encrypted,"758805")
-    .run()
+      .bind(encrypted, usernum)
+      .run()
 
-    return c.json({ success: true, adminId: result.meta.last_row_id }, 201)
+    return c.json({ 
+      success: true, 
+      message: 'Item updated successfully',
+      meta: result.meta 
+    })
   } catch (err: any) {
     return c.json({ error: 'adminname already exists or database error' }, 400)
   }
-})
-
-//生成公用密钥
-app.post('/api/public/addkey', securityMiddleware, async (c) => {
-    try{
-        const query = 'SELECT * FROM system_keys WHERE key_name = ? ORDER BY created_at DESC'
-        const res = await c.env.DB.prepare(query)
-          .bind("default")
-          .all()
-        
-        if(res.results.length<1||!res.results[0].public_keyD||!res.results[0].private_keyD||!res.results[0].public_keyF||!res.results[0].private_keyF){
-            //用于加解密
-          const keyPair1 = (await crypto.subtle.generateKey(
-              {
-                name: "RSASSA-PKCS1-v1_5",
-                modulusLength: 2048, // 密鑰長度
-                publicExponent: new Uint8Array([1, 0, 1]), 
-                hash: "SHA-256",
-              },
-              true, // 是否可匯出
-              ["encrypt", "decrypt","sign", "verify"]
-          )) as CryptoKeyPair;
-
-        // 2. 將公鑰匯出為 SPKI (PEM 格式的前置步驟)
-        const exportedPublicKeyD = await crypto.subtle.exportKey("spki", keyPair1.publicKey);
-        const publicKeyPemD = formatPem(exportedPublicKeyD as ArrayBuffer, "PUBLIC KEY");
-
-        // 3. 將私鑰匯出為 PKCS8
-        const exportedPrivateKeyD = await crypto.subtle.exportKey("pkcs8", keyPair1.privateKey);
-        const privateKeyPemD = formatPem(exportedPrivateKeyD as ArrayBuffer, "PRIVATE KEY");
-
-        // 輔助函式：將 ArrayBuffer 轉換為標準 PEM 格式字串
-        function formatPem(buffer:ArrayBuffer, label:string) {
-            const bytes=new Uint8Array(buffer);
-            let binary="";
-            for(let i=0;i<bytes.byteLength;i++){
-              binary+=String.fromCharCode(bytes[i]);
-            }
-
-            const base64 = btoa(binary);
-            const chunks = base64.match(/.{1,64}/g) || [];
-            return `-----BEGIN ${label}-----\n${chunks.join('\n')}\n-----END ${label}-----`;
-        }
-
-        //
-        const KeyPair2 = await crypto.subtle.generateKey(
-          {
-            name: "RSASSA-PKCS1-v1_5",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array([1, 0, 1]),
-            hash: "SHA-256",
-          },
-          true,
-          ["encrypt", "decrypt"] // 宣告用途
-        ) as CryptoKeyPair;
-
-        // 2. 匯出公鑰 (spki 格式) 與私鑰 (pkcs8 格式)
-        const exportedPublicKeyE = await crypto.subtle.exportKey("spki", KeyPair2.publicKey);
-        const exportedPrivateKeyE = await crypto.subtle.exportKey("pkcs8", KeyPair2.privateKey);
-
-        // 3. 使用你的 formatPem 轉成標準 PEM 字串
-        const publicKeyPemE = formatPem(exportedPublicKeyE as ArrayBuffer, "PUBLIC KEY");
-        const privateKeyPemE = formatPem(exportedPrivateKeyE as ArrayBuffer, "PRIVATE KEY");
-
-        const result_system = await c.env.DB.prepare(
-          'INSERT INTO system_keys (key_name,public_keyD,private_keyD,public_keyE,private_keyE) VALUES (?,?,?,?,?)'
-        )
-        .bind("default",publicKeyPemD,privateKeyPemD,publicKeyPemE,privateKeyPemE)
-        .run()
-        return c.json({ success: true, id: result_system.meta.last_row_id,})
-        }else{
-          return c.json({ success: false, data: "金钥已经存在" })
-        }
-    }catch(err:any){
-      return c.json({ 
-        success: false, 
-        error: err.message 
-      }, 500)
-    }
 })
 
 // 获取公共密钥
@@ -483,13 +548,12 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
     const query = 'SELECT * FROM system_keys WHERE key_name = ? ORDER BY created_at DESC'
     const res = await c.env.DB.prepare(query)
       .bind("default")
-      .all()
-      
-    if(res.results.length>0&&res.results[0].public_keyD&&res.results[0].private_keyE){
+      .all() 
+    if(res.results.length>0&&res.results[0].public_keyF&&res.results[0].private_keyE){
       return c.json({
           success: true, 
           data: {
-            public_keyD:res.results[0].public_keyD,
+            public_keyF:res.results[0].public_keyF,
             private_keyE:res.results[0].private_keyE
           }
       })
@@ -499,7 +563,7 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
       success: false, 
     }, 400)
     
-  } catch (err: any) {
+  } catch (err: any) {console.log(err)
     // 4. 捕獲並返回異常錯誤
     return c.json({ 
       success: false, 
@@ -507,14 +571,13 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
     }, 500)
   }
 })
-
 // 用戶登入 (核發 JWT)
 app.post('/api/auth/login', securityMiddleware, authMiddleware, async (c) => {
   try{  
     const usernum = c.get('usernum')
     const password=c.get("password")
     if(!usernum||!password)return c.json({ error: 'Invalid username or password' },401)
-    const passwordHash = await hashPassword(password)
+    const passwordHash = await hashPassword(password);console.log(passwordHash)
     // 1. 驗證用戶帳號與密碼
     const user: any = await c.env.DB.prepare(
       'SELECT id, username FROM users WHERE username = ? AND password_hash = ?'
@@ -532,23 +595,19 @@ app.post('/api/auth/login', securityMiddleware, authMiddleware, async (c) => {
       username: user.username,
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
     }
-    const token = await sign(payload, c.env.JWT_SECRET) 
+    const token = await sign(payload, c.env.JWT_SECRET);
     const sysKeys: any = await c.env.DB.prepare(
         'SELECT * FROM system_keys WHERE key_name = ?'
     ).bind('default').first();
-    if (!sysKeys||!sysKeys.public_keyE||!sysKeys.private_keyD) {
+    if (!sysKeys||!sysKeys.public_keyE) {
         return c.json({ error: 'key not found' }, 400)
     }
-    
     const publicKeyPem = sysKeys.public_keyE as string;
     const encrypted=await encryptflare(publicKeyPem,token);
-    const publicKeyPem1 = sysKeys.private_keyD as string;
-    const signbase64= await verifysign(publicKeyPem1,token);
     return c.json({
       success: true,
       token:encrypted,
-      username: user.username,
-      signbase64:signbase64
+      username: user.username
     })
   } catch (err: any) {
     // 4. 捕獲並返回異常錯誤
@@ -558,7 +617,53 @@ app.post('/api/auth/login', securityMiddleware, authMiddleware, async (c) => {
     }, 500)
   }
 })
-
+// 管理员登入 (核發 JWT)
+app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) => {
+  try{  
+    const usernum = c.get('usernum');
+    const password=c.get("password")
+    if(!usernum||!password)return c.json({ error: 'Invalid username or password' },401)
+    const sysKeys: any = await c.env.DB.prepare(
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind('default').first();
+    if (!sysKeys||!sysKeys.public_keyE||!sysKeys.public_keyF) {
+        return c.json({ error: 'key not found' }, 400)
+    }
+    const publicKeyPem1 = sysKeys.public_keyF as string;
+      const passwordHash = await encryptflare(publicKeyPem1,password);
+    // 1. 驗證用戶帳號與密碼
+    const user: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+      .bind(usernum)
+      .first()
+    
+    if (!user&&user.password!==passwordHash) {
+      return c.json({ error: 'Invalid adminname or password' }, 401)
+    }
+    
+    // 2. 簽署生成 JWT Token (設定 24 小時後過期)
+    const payload = {
+      id: user.id,
+      username: user.username,
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
+    }
+    const token = await sign(payload, c.env.JWT_SECRET);
+    const publicKeyPem = sysKeys.public_keyE as string;
+    const encrypted=await encryptflare(publicKeyPem,token);
+    return c.json({
+      success: true,
+      token:encrypted,
+      username: user.username
+    })
+  } catch (err: any) {
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
 // ----------------------------------------------------
 // 2. 註冊 JWT 鑑權中間件 (保護所有以 /api/protected/* 開頭的路由)
 // ----------------------------------------------------
@@ -570,12 +675,20 @@ app.use('/api/protected/*', (c, next) => {
   })
   return jwtMiddleware(c, next)
 })
-
 // ----------------------------------------------------
 // 3. 受保護路由 (Protected Routes)
 // ----------------------------------------------------
-
-//签章特征值
+// 獲取目前登入用戶個人資訊
+app.post('/api/protected/me', (c) => {
+  // 從 JWT 解析結果中獲取當前用戶 Payload
+  const payload = c.get('jwtPayload');
+  return c.json({
+    success:true,
+    message: 'Authorized',
+    user: payload
+  })
+})
+//签章高级会员特征值
 app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -585,15 +698,22 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
       const mechinaId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE user_id = ?'
     ).bind(user.id).first();
-      // 1. 從資料庫讀出私鑰 PEM 字串
     if(!mechinaId||!mechinaId.UUID)return c.json({ error: 'Invalid username' },401)
+    // 1. 從資料庫讀出私鑰 PEM 字串
     const dbKeyRecord: any = await c.env.DB.prepare(
+        'SELECT * FROM user_keys WHERE user_id = ?'
+    ).bind(user.id).first();
+    if(!dbKeyRecord||!dbKeyRecord.private_keyD)return c.json({ 
+      success: false, 
+    }, 400) 
+    const dbKeyRecord1: any = await c.env.DB.prepare(
         'SELECT * FROM system_keys WHERE key_name = ?'
-    ).bind('default').first();
-    if(!dbKeyRecord||!dbKeyRecord.private_keyD||!dbKeyRecord.public_keyD)return c.json({ 
+    ).bind("default").first();
+    if(!dbKeyRecord1||!dbKeyRecord1.private_keyF)return c.json({ 
       success: false, 
     }, 400) 
     const privateKeyPem = dbKeyRecord.private_keyD as string;
+    const privateKeyPem1 = dbKeyRecord1.private_keyF as string;
     const expires=message.split("(ASD)")[1];
     const subtype=message.split("(ASD)")[2];
     const signatureBase64=await verifysign(privateKeyPem,usernum+mechinaId.UUID+expires+subtype) 
@@ -603,7 +723,7 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     if(!adminlist||adminlist.adminname!=="17369622758")return c.json({ 
       success: false, 
     }, 400)
-    const plantext=await decryptflare(privateKeyPem,adminlist.password);
+    const plantext=await decryptflare(privateKeyPem1,adminlist.password);
     if(!plantext)return c.json({ 
       success: false, 
     }, 400)
@@ -613,24 +733,24 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     await c.env.DB.prepare(
       'INSERT INTO user_sign (user_id,usernum,UUID,expires,signature) VALUES (?,?,?,?,?)'
     )
-    .bind(user.id,usernum,message.split("(ASD)")[1],expires,sign)
+    .bind(user.id,usernum,mechinaId.UUID,expires,sign)
     .run()
 
 
   verifynext(signatureBase64)
     async function verifynext(signature_Base64: string){
       // 1. 從資料庫讀出公鑰 PEM 字串（通常對應使用者的公鑰欄位）
-      const dbKeyRecord1: any = await c.env.DB.prepare(
-        'SELECT * FROM system_keys WHERE key_name = ?'
-    ).bind('default').first();
+      const dbKeyRecord2: any = await c.env.DB.prepare(
+        'SELECT * FROM user_keys WHERE user_id = ?'
+    ).bind(user.id).first();
 
-      if (!dbKeyRecord1 || !dbKeyRecord1.public_keyD) {
+      if (!dbKeyRecord2 || !dbKeyRecord2.public_keyD) {
         return c.json({ success: false, error: '找不到對應的公鑰' }, 400);
       }
-      const publicKeyPem = dbKeyRecord1.public_keyD as string;
+      const publicKeyPem2 = dbKeyRecord2.public_keyD as string;
 
       // 2. 將 PEM 轉回 ArrayBuffer（與加簽時的 pemToArrayBuffer 相同邏輯）
-      const publicKeyBuffer = pemToArrayBuffer(publicKeyPem);
+      const publicKeyBuffer = pemToArrayBuffer(publicKeyPem2);
 
       // 3. 還原為用於驗證的 CryptoKey 物件
       const publicKey = await crypto.subtle.importKey(
@@ -679,7 +799,18 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     }, 500)
   }  
 })
-
+//加入普通会员
+app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    await c.env.DB.prepare(
+      'INSERT INTO member_start (user_id) VALUES (?)'
+    )
+    .bind(user.id)
+    .run()
+    return c.json({success:true,usernum:usernum})
+})
 //产生与获取解禁码
 app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c)=>{
   try{  
@@ -687,15 +818,15 @@ app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c
     const usernum = c.get('usernum')
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
       const dbKeyRecord: any = await c.env.DB.prepare(
-        'SELECT * FROM system_keys WHERE key_name = ?'
-    ).bind('default').first();
-    if(!dbKeyRecord||!dbKeyRecord.private_keyD||!dbKeyRecord.public_keyD)return c.json({ 
+        'SELECT * FROM user_keys WHERE user_id = ?'
+    ).bind(user.id).first();
+    if(!dbKeyRecord||!dbKeyRecord.private_keyD)return c.json({ 
       success: false, 
     }, 400) 
     const openobj: any = await c.env.DB.prepare(
-        'SELECT * FROM mbmber_start WHERE user_id = ?'
+        'SELECT * FROM member_start WHERE user_id = ?'
     ).bind(user.id).first();
-    if(!openobj||!openobj.user_id)return c.json({ 
+    if(!openobj||!openobj.user_id||openobj.user_id!==user.id)return c.json({ 
       success: false, 
     }, 400) 
     const privateKeyPem = dbKeyRecord.private_keyD as string;
@@ -712,6 +843,7 @@ app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c
     return c.json({
       success: true,
       fnsum: encrypted,
+      usernum:usernum,
       signatureBase64:signatureBase64
     })
 
@@ -723,8 +855,55 @@ app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c
     }, 500)
   } 
 })
+//产生并返回用户验章密钥
+app.post("/api/protected/useraddkey", securityMiddleware, authMiddleware, async (c)=>{
+  try{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const query = 'SELECT * FROM user_keys WHERE user_id = ? ORDER BY created_at DESC'
+    const res = await c.env.DB.prepare(query)
+      .bind(user.id)
+      .all()
+    if(res.results.length<1||!res.results[0].public_keyD||!res.results[0].private_keyD){
+        //用于签章
+      const keyPair1 = (await crypto.subtle.generateKey(
+          {
+            name: "RSASSA-PKCS1-v1_5",
+            modulusLength: 2048, // 密鑰長度
+            publicExponent: new Uint8Array([1, 0, 1]), 
+            hash: "SHA-256",
+          },
+          true, // 是否可匯出
+          ["sign", "verify"]
+      )) as CryptoKeyPair;
 
-//查找特征值签章
+      // 2. 將公鑰匯出為 SPKI (PEM 格式的前置步驟)
+      const exportedPublicKeyD = await crypto.subtle.exportKey("spki", keyPair1.publicKey);
+      const publicKeyPemD = formatPem(exportedPublicKeyD as ArrayBuffer, "PUBLIC KEY");
+
+      // 3. 將私鑰匯出為 PKCS8
+      const exportedPrivateKeyD = await crypto.subtle.exportKey("pkcs8", keyPair1.privateKey);
+      const privateKeyPemD = formatPem(exportedPrivateKeyD as ArrayBuffer, "PRIVATE KEY");
+
+      await c.env.DB.prepare(
+        'INSERT INTO user_keys (user_id,public_keyD,private_keyD) VALUES (?,?,?)'
+      )
+      .bind(user.id,publicKeyPemD,privateKeyPemD)
+      .run()
+      return c.json({success:true,usernum:usernum,publicKeyD:privateKeyPemD})
+
+    }else{
+      return c.json({ success: false, data: "金钥已经存在" })
+    }
+  }catch(err:any){
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }  
+})
+//查找签章的特征值
 app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -739,12 +918,22 @@ app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c
     const sysKeys: any = await c.env.DB.prepare(
         'SELECT * FROM system_keys WHERE key_name = ?'
     ).bind('default').first();
-    if (!sysKeys||!sysKeys.public_keyE||!sysKeys.private_keyD) {
+    if (!sysKeys||!sysKeys.public_keyE) {
         return c.json({ error: 'key not found' }, 400)
     }
-    const token=signobj.signature.substring(0,500);
-    const publicKeyPem1 = sysKeys.private_keyD as string;
+    const sysKeys1: any = await c.env.DB.prepare(
+        'SELECT * FROM user_keys WHERE user_id = ?'
+    ).bind(user.id).first();
+    if (!sysKeys1||!sysKeys1.private_keyD) {
+        return c.json({ error: 'key not found' }, 400)
+    }
+    const sum=Math.floor(Math.random()*(sign.length-1));
+    const sum1=sum<500?sum:sum-500;
+    const token=signobj.signature.substring(sum1,sum1+500);
+    const publicKeyPem = sysKeys.public_keyE as string;
+    const publicKeyPem1 = sysKeys1.private_keyD as string;
     const signbase64= await verifysign(publicKeyPem1,token);
+    const encrypted=await encryptflare(publicKeyPem,sum1.toString())
     return c.json({
       success: true,
       UUID:signobj.UUID,
@@ -752,6 +941,7 @@ app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c
       subtag:signobj.type,
       sign:signobj.signature,
       usernum: user.username,
+      fnsum:encrypted,
       signbase64:signbase64
     })
   } catch (err: any) {

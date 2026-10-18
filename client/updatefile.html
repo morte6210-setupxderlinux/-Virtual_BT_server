@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>项目管理</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body { width:100%;height:100vh;}
+        .buttop{
+            width:100%;
+            height:50px;
+            border-bottom: 1px solid #f38020;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin-bottom:15px;
+        }
+        .buttop>button{
+            width:160px;
+            height:40px;
+            color:#f38020;
+            background-color:transparent;
+            font-size:16px;
+            font-weight: bold;
+            border:0 solid transparent;
+        }
+        .main{
+            width:100%;
+            height:90%;
+            margin: 0 auto;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-direction: column;
+        }
+        .main>.buttab1,
+        .main>.buttab1>div,
+        .main>.buttab2,
+        .main>.buttab3{
+            width:100%;
+            height:100%;
+        }
+        .main>.buttab1{
+            display:block;
+            padding: 10px;
+        }
+        .main>.buttab1>div{
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .main>.buttab1>div>div{
+            width:200px;
+            height:40px;
+            display:flex;
+            justify-content: flex-start;
+            align-items: center;
+            margin-right:15px;
+        }
+        .main>.buttab1>div>div>p{
+            width:160px;
+            height:100%;
+            text-indent: 1em;
+            line-height: 40px;
+        }
+        .main>.buttab1>div>div>input{
+            width:30px;
+            height:30px;
+        }
+        .main>.buttab2{
+            display: none;
+        }
+        .main>.buttab2>div:nth-child(1){
+            width:160px;
+            height:50px;
+            background-color: transparent;
+            position: relative;
+            margin:15px;
+        }
+        .main>.buttab2>div:nth-child(1)>button{
+            width:120px;
+            height:40px;
+            position: absolute;
+            left:50%;top:50%;
+            transform: translate(-50%,-50%);
+            z-index:2;
+        }
+        .main>.buttab2>div:nth-child(1)>input{
+            width:120px;
+            height:40px;
+            position: absolute;
+            left:50%;top:50%;
+            transform: translate(-50%,-50%);
+            z-index:1;
+            opacity: 0;
+            overflow: hidden;
+        }
+        .main>.buttab2>div:nth-child(2){
+            width:100%;
+            height:400px;
+            overflow-y: scroll;
+        }
+        .main>.buttab2>div:nth-child(2)>ul{
+            width:100%;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .main>.buttab2>div:nth-child(2)>ul>li,
+        .main>.buttab2>div:nth-child(2)>ul>li>img{
+            width:150px;
+            height:200px;
+        }
+        .main>.buttab3{
+            display: none;
+            justify-content: space-around;
+            align-items: center;
+            flex-direction: column;
+        }
+        .main>.buttab3>div{
+            width:100%;
+            margin-bottom:15px;
+        }
+        .main>.buttab3>div>h2{
+            width:160px;
+            height:50px;
+            font-weight: bold;
+            margin: 15px;
+        }
+        .main>.buttab3>div>ul{
+            width:100%;
+            display:flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .main>.buttab3>div>ul>li{
+            width:290px;
+            height:100px;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-direction: column;
+        }
+        .main>.buttab3>div>ul>li>div{
+            width:100%;
+            height:40px;
+            margin: 5px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+        .main>.buttab3>div>ul>li>div>p{
+            width:120px;
+            height:100%;
+            text-indent: 1em;
+            line-height: 40px;
+        }
+        .main>.buttab3>div>ul>li>div>input,
+        .main>.buttab3>div>ul>li>div>select{
+            width:160px;
+            height:100%;
+            text-indent: 1em;
+            line-height: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="buttop">
+        <button>初始化管理</button>
+        <button>文件管理</button>
+        <button>项目设定</button>
+    </div>
+    <div class="main">
+        <div class="buttab1">
+            <div>
+                <div>
+                    <p>生成sql表格</p><input type="checkbox">
+                </div>
+                <div>
+                    <p>生成公用密钥</p><input type="checkbox">
+                </div>
+                <div>
+                    <p>密钥更新服务</p><input type="checkbox">
+                </div>
+            </div>
+        </div>
+        <div class="buttab2">
+            <div><button>上传文件</button><input type="file"></div>
+            <div>
+                <ul>
+                    <li><img src="" alt=""></li>
+                </ul>
+            </div>
+        </div>
+        <div class="buttab3">
+            <div>
+                <h2>邮箱：</h2>
+                <ul>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>邮箱号：</p><input type="text"></div>
+                    </li>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>邮箱号：</p><input type="text"></div>
+                    </li>
+                </ul>                
+            </div>
+            <div>
+                <h2>社交：</h2>
+                <ul>
+                    <li>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>
+                    <li>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>    
+                </ul>                
+            </div>
+            <div>
+                <h2>自媒体：</h2>
+                <ul>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>账户ID：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li>                    
+                </ul>                
+            </div>
+            <div>
+                <h2>支付：</h2>
+                <ul>
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li> 
+                    <li>
+                        <div><p>归属：</p><input type="text"></div>
+                        <div><p>链接：</p><input type="text"></div>
+                    </li> 
+                </ul>                
+            </div>
+            <div>
+                <h2>用户管理</h2>
+                <ul>
+                    <li>
+                        <div><p>账户ID：</p><input type="text" disabled></div>
+                        <div><p>账户类别：</p><select><option></option></select></div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const token=urlParams.get('token');
+        fetch("http://127.0.0.1:8787/api/auth/login",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                "Authorization":`Bearer ${token}`
+            }
+        }).then(response=>{
+            if(!response.ok){
+                throw new Error(`HTTP 错误！状态码：${response.status}`)
+            }
+            return response.json();
+        }).then(data=>{
+            if(!data.success)window.location.href="https://long-band-acd3.setupxderlinux.workers.dev";
+            nextsetup();
+        }).catch(err=>{
+            console.log(err);
+        })
+        function nextsetup(){
+            document.querySelector(".buttop>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                document.querySelector(".main>buttab1").style.display="block";
+                document.querySelector(".main>buttab2").style.display="none";
+                document.querySelector(".main>buttab3").style.display="none";
+            }
+            document.querySelector(".buttop>button:nth-child(2)").onclick=function(e){
+                e.stopPropagation();
+                document.querySelector(".main>buttab1").style.display="none";
+                document.querySelector(".main>buttab2").style.display="flex";
+                document.querySelector(".main>buttab3").style.display="none";
+            }
+            document.querySelector(".buttop>button:nth-child(3)").onclick=function(e){
+                e.stopPropagation();
+                document.querySelector(".main>buttab1").style.display="none";
+                document.querySelector(".main>buttab2").style.display="none";
+                document.querySelector(".main>buttab3").style.display="flex";
+            }
+        }
+    </script>
+</body>
+</html>

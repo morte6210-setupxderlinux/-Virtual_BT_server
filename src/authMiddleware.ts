@@ -9,33 +9,35 @@ export const authMiddleware = async (c: Context, next: Next) => {
     }
     const token = authHeader.split(' ')[1];
      */
-    const body = await c.req.json()
+    const body = await c.req.json();
     const sysKeys: any = await c.env.DB.prepare(
         'SELECT * FROM system_keys WHERE key_name = ?'
     ).bind('default').first();
     
-    if (!sysKeys||!sysKeys.private_keyD) {
+    if (!sysKeys||!sysKeys.private_keyF) {
         return c.json({ error: 'key not found' }, 400)
     }
-    const privateKeyPem = sysKeys.private_keyD as string;
-    const decrypted=await decryptflare(privateKeyPem,body) as string;
+    const privateKeyPem = sysKeys.private_keyF as string;
+    const decrypted=await decryptflare(privateKeyPem,body.encrypted) as string;
+    
     if (!decrypted) {
         return c.json({ error: 'encrypt not found' }, 400)
     }
-    const meObj=JSON.parse(decrypted);
-    const reg1=/^([\w.-]+@[\w.-]+\.\w+|1[3-9]\d{9})$/;
+    const meObj=JSON.parse(decrypted);console.log(meObj)
+    const reg1=/^([\w.-]+@[\w.-]+\.\w+|1[3-9]\d{9})$/;console.log(reg1.test(meObj.username))
     const reg2=/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    if (!meObj||!meObj.usernum) {
+    if (!meObj||!meObj.username) {
         return c.json({ error: 'Usernum no found' }, 400)
     }
-    if(!reg1.test(meObj.usernum))return c.json({ error: 'Invalid username' }, 400)
+    if(!reg1.test(meObj.username))return c.json({ error: 'Invalid username' }, 400);console.log(meObj,reg2.test(meObj.password))
     if(meObj.password&&!reg2.test(meObj.password))return c.json({ error: 'Invalid password' }, 400)
     //使用 c.set() 將解密後的資料掛載到上下文中
     // 你可以自訂一個鍵名，例如 'user' 或 'tokenPayload'
-    c.set('usernum', meObj.usernum);
+    c.set('usernum', meObj.username);
     c.set('password', meObj.password?meObj.password:"");
     c.set('token', meObj.token?meObj.token:"");
-    c.set('message', meObj.msg?meObj.msg:"");
+    c.set('message', meObj.message?meObj.message:"");
+    c.set('subtag', meObj.subtag?meObj.subtag:"");
 
     // 驗證通過，繼續執行下一個中間件或 API 路由
     await next();
@@ -83,7 +85,7 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
         const privateKey = await crypto.subtle.importKey(
           "pkcs8",
           pkBuffer,
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+          { name: "RSA-OAEP", hash: "SHA-256" },
           true,
           ["decrypt"]
         );
@@ -93,13 +95,13 @@ function decryptflare(pem:string,ciphertextBase64: string): Promise<string | nul
 
         // D. 執行解密
         const decryptedBuffer = await crypto.subtle.decrypt(
-          { name: "RSASSA-PKCS1-v1_5" },
+          { name: "RSA-OAEP" },
           privateKey,
           cipherBuffer
         );
 
         resolve(new TextDecoder().decode(decryptedBuffer));
-    } catch (err) {
+    } catch (err) {console.log(err)
       resolve(null);
     }
   });
