@@ -153,7 +153,10 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS member_start (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          publicid TEXT,
           user_id INTEGER NOT NULL,
+          usernum INTEGER NOT NULL,
+          type TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -165,7 +168,7 @@ async function initializeDatabase(db: D1Database) {
       CREATE TABLE IF NOT EXISTS items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           usernum INTEGER NOT NULL,
-          title INTEGER NOT NULL,
+          filename INTEGER NOT NULL,
           content INTEGER NOT NULL,
           file_key INTEGER NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -279,10 +282,8 @@ async function addadminname(db: D1Database){
   .run()
   return result
 }
-
 // 用一個全域變數確保在同一個 Worker 生命週期中只執行一次初始化
 let isInitialized = false;
-
 // 利用 Hono 的全域 Middleware，在收到第一個請求時自動觸發初始化（若尚未執行）
 app.use('*', async (c, next) => {
   if (!isInitialized && c.env && c.env.DB) {
@@ -294,7 +295,6 @@ app.use('*', async (c, next) => {
   }
   await next();
 });
-
 // 輔助函式：使用 Web Crypto API 對密碼進行 SHA-256 雜湊
 async function hashPassword(password: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(password)
@@ -302,7 +302,6 @@ async function hashPassword(password: string): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer))
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
 }
-
 // 1. pem 轉 ArrayBuffer
 function pemToArrayBuffer(pem: string): ArrayBuffer {
   const base64String = pem
@@ -445,7 +444,6 @@ function generateRandom6Digits(): string {
   const randomNum = array[0] % 1000000;
   return String(randomNum).padStart(6, '0');
 }
-
 // ----------------------------------------------------
 // 1. 公開路由 (Auth: 註冊與登入)
 // ----------------------------------------------------
@@ -952,14 +950,21 @@ app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c
     }, 500)
   }
 })
-
-// 受保護的文件上傳 API
-app.post('/api/protected/upload', securityMiddleware, authMiddleware, async (c) => {
+// 文件上傳 API
+app.post('/api/protected/upload', securityMiddleware, async (c) => {
   try{
     const user = c.get('jwtPayload')
-    const usernum=c.get("usernum")
-    const message=c.get('message')
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const sysKeys: any = await c.env.DB.prepare(
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind('default').first();
+    if (!sysKeys||!sysKeys.private_keyF) {
+        return c.json({ error: 'key not found' }, 400)
+    }
+    const encrypted=c.req.query("encrypted") as string;
+    const decrypted=await decryptflare(sysKeys.private_keyF,decodeURIComponent(encrypted)) as string;
+    const user_id=JSON.parse(decrypted).user_id;
+    const message=JSON.parse(decrypted).message;
+    if(!user_id||parseInt(user_id)!==user.id)return c.json({ error: 'Invalid username' },401)
     
     const body = await c.req.parseBody()
     const file = body['file'] as File
@@ -978,9 +983,9 @@ app.post('/api/protected/upload', securityMiddleware, authMiddleware, async (c) 
 
     // 寫入 D1
     await c.env.DB.prepare(
-      'INSERT INTO items (title, content, file_key,usernum) VALUES (?, ?, ?,?)'
+      'INSERT INTO items (filename, content, file_key,usernum) VALUES (?, ?, ?,?)'
     )
-      .bind(file.name, message, fileKey,usernum)
+      .bind(file.name, message, fileKey,user.username)
       .run()
 
     return c.json({
@@ -996,7 +1001,6 @@ app.post('/api/protected/upload', securityMiddleware, authMiddleware, async (c) 
     }, 500)
   }
 })
-
 //获取ADlink,paylist,custemail
 app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c)=>{
   try{
@@ -1007,16 +1011,18 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       adlist: Record<string, unknown>[];
       items: Record<string, unknown>[];
       custemail: Record<string, unknown>[];
+      userlist: Record<string, unknown>[];
     } = {
       adlist: [],
       items: [],
-      custemail: []
+      custemail: [],
+      userlist: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
       const res1 = await c.env.DB.prepare(
         'SELECT * FROM ADlink WHERE usernum = ? ORDER BY created_at DESC'
-    ).bind(usernum).all();
-      let results
+    ).bind(usernum).all();    
+      let results=[];
       if (message) {
         // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
         const query = 'SELECT * FROM items WHERE usernum LIKE ? OR content LIKE ? ORDER BY created_at DESC'
@@ -1025,24 +1031,24 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
         const res = await c.env.DB.prepare(query)
           .bind(searchTerm1, searchTerm2)
           .all()
-        results = res.results
+        results = res.results as any;
       } else {
-        // 3. 如果沒有提供關鍵字，則返回最近的全部數據（或限制筆數）
-        const res = await c.env.DB.prepare(
-          'SELECT * FROM items ORDER BY created_at DESC LIMIT 50'
-        ).all()
-        results = res.results
+        // 3. 如果沒有提供關鍵字，則返回空
       }
     const res2 = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
+    const res3 = await c.env.DB.prepare(
+        'SELECT * FROM member_start WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
     if(res1.results.length>0)newObj.adlist.push(...res1.results);
     if(results.length>0)newObj.items.push(...results);
     if(res2.results.length>0)newObj.custemail.push(...res2.results);
+    if(res3.results.length>0)newObj.userlist.push(...res3.results);
     return c.json({
-      success: true,
-      usernum: user.username,
-      newObj:newObj
+        success: true,
+        usernum: user.username,
+        newObj:newObj
     })
   } catch (err: any) {
     // 4. 捕獲並返回異常錯誤
@@ -1051,5 +1057,25 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       error: err.message || 'Internal Server Error' 
     }, 500)
   }
+})
+//增删改adlink
+app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware, async (c)=>{
+
+})
+//增删改email
+app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, async (c)=>{
+
+})
+//增删改cust
+app.post("/api/protected/adddelrest_cust", securityMiddleware, authMiddleware, async (c)=>{
+
+})
+//增删改paylist
+app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, async (c)=>{
+
+})
+//删改会员标识
+app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware, async (c)=>{
+
 })
 export default app

@@ -23,13 +23,13 @@ export const authMiddleware = async (c: Context, next: Next) => {
     if (!decrypted) {
         return c.json({ error: 'encrypt not found' }, 400)
     }
-    const meObj=JSON.parse(decrypted);console.log(meObj)
-    const reg1=/^([\w.-]+@[\w.-]+\.\w+|1[3-9]\d{9})$/;console.log(reg1.test(meObj.username))
+    const meObj=JSON.parse(decrypted);
+    const reg1=/^([\w.-]+@[\w.-]+\.\w+|1[3-9]\d{9})$/;
     const reg2=/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!meObj||!meObj.username) {
         return c.json({ error: 'Usernum no found' }, 400)
     }
-    if(!reg1.test(meObj.username))return c.json({ error: 'Invalid username' }, 400);console.log(meObj,reg2.test(meObj.password))
+    if(!reg1.test(meObj.username))return c.json({ error: 'Invalid username' }, 400);
     if(meObj.password&&!reg2.test(meObj.password))return c.json({ error: 'Invalid password' }, 400)
     //使用 c.set() 將解密後的資料掛載到上下文中
     // 你可以自訂一個鍵名，例如 'user' 或 'tokenPayload'
@@ -37,7 +37,6 @@ export const authMiddleware = async (c: Context, next: Next) => {
     c.set('password', meObj.password?meObj.password:"");
     c.set('token', meObj.token?meObj.token:"");
     c.set('message', meObj.message?meObj.message:"");
-    c.set('subtag', meObj.subtag?meObj.subtag:"");
 
     // 驗證通過，繼續執行下一個中間件或 API 路由
     await next();

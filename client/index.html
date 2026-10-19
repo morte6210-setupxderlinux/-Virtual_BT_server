@@ -72,9 +72,11 @@
         <div><button>提交</button></div>
     </div>
     <script>
+        const clientUrl="http://localhost:3000";
+        const serverUrl="http://127.0.0.1:8787";
         const nonce = generateRandom6Digits(); // 隨機數
         const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
-        fetch("http://127.0.0.1:8787/api/public/findkey",{
+        fetch(serverUrl+"/api/public/findkey",{
             method:"POST",
             headers:{
                 "Content-Type":"application/json",
@@ -124,15 +126,14 @@
                 if(reg2.test(This.value))inputvalue.message=this.value;
             }
             document.querySelector(".main>div:nth-child(5)>button").onclick=async function(e){
-                e.stopPropagation();console.log(inputvalue)
+                e.stopPropagation();
                 if(inputvalue.subtag==="login"){
                     alert("你需要登录吗？");
-                    console.log(inputvalue)
                     if(inputvalue.username&&inputvalue.password&&inputvalue.subtag){
                         const nonce1 = generateRandom6Digits(); console.log(nonce)
                         const timestamp1 = Math.floor(Date.now() / 1000).toString();
                         const encrypted=await encryptflare(publicKeyF,JSON.stringify(inputvalue))
-                        fetch("http://127.0.0.1:8787/api/auth/adminlogin",{
+                        fetch(serverUrl+"/api/auth/adminlogin",{
                             method:"POST",
                             headers:{
                                 "Content-Type":"application/json",
@@ -154,7 +155,7 @@
                                 document.querySelector(".main>div:nth-child(2)>input").value="";
                                 document.querySelector(".main>div:nth-child(3)>input").value="";
                                 document.querySelector(".main>div:nth-child(4)>input").value="";
-                                window.location.href="http://127.0.0.1:3000/updatefile?token="+encodeURIComponent(data.token);
+                                window.location.href=clientUrl+"/updatefile?token="+encodeURIComponent(data.token)+"&username="+encodeURIComponent(encrypted);
                             }
                         }).catch(err=>{
                             console.log(err+"1122");
@@ -167,7 +168,7 @@
                         const nonce1 = generateRandom6Digits(); // 隨機數
                         const timestamp1 = Math.floor(Date.now() / 1000).toString(); 
                         const encrypted=await encryptflare(publicKeyF,JSON.stringify(inputvalue));
-                        fetch("http://127.0.0.1:8787/api/auth/adminrestart",{
+                        fetch(serverUrl+"/api/auth/adminrestart",{
                             method:"POST",
                             headers:{
                                 "Content-Type":"application/json",
