@@ -1060,22 +1060,139 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
 })
 //增删改adlink
 app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware, async (c)=>{
-
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM ADlink WHERE urlId = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!res||!res.urlId){  
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime) VALUES (?,?,?,?,?,?,?)'
+        )
+        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6])
+        .run()
+      }
+    }else{
+      if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM ADlink WHERE urlId = ?'
+        )
+        .bind(message.split("(ASD)")[1])
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE ADlink SET title = ?,xuhao = ?,postname = ?,linkUrl = ?,expritime = ? WHERE urlId = ?'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[0])
+        .run()
+      }
+    }
 })
-//增删改email
+//增删改email,cust,pubaunot
 app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, async (c)=>{
-
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM custemail WHERE publicid = ?'
+    ).bind("758805").first();
+    if(!res||!res.urlId){
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO custemail (emailaunot,custcode,pubaunot,publicid) VALUES (?,?,?,?)'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+        .run()
+      }
+    }else{
+        if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM custemail WHERE publicid = ?'
+        )
+        .bind("758805")
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE custemail SET emailaunot = ?,custcode = ?,pubaunot = ? WHERE publicid = ?'
+        )
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+        .run()
+      }
+    }
 })
-//增删改cust
-app.post("/api/protected/adddelrest_cust", securityMiddleware, authMiddleware, async (c)=>{
 
-})
 //增删改paylist
 app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, async (c)=>{
-
+  const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM items WHERE content = ?'
+    ).bind(message.split("(ASD)")[2]).first();
+    if(!res||!res.urlId){  
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO items (usernum,filename,content,file_key) VALUES (?,?,?,?)'
+        )
+        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3])
+        .run()
+      }
+    }else{
+      if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM items WHERE content = ?'
+        )
+        .bind(message.split("(ASD)")[2])
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE items SET filename = ?,file_key = ? WHERE content = ?'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[3],message.split("(ASD)")[2])
+        .run()
+      }
+    }
 })
-//删改会员标识
+//增删改会员标识
 app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware, async (c)=>{
-
+  const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM member_start WHERE usernum = ?'
+    ).bind(usernum).first();
+    if(!res||!res.urlId){
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO member_start (usernum,user_id,type,publicid) VALUES (?,?,?,?)'
+        )
+        .bind(usernum,user.id,message.split("(ASD)")[1],"758805")
+        .run()
+      }
+    }else{
+      if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM member_start WHERE usernum = ?'
+        )
+        .bind(usernum)
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE member_start SET type = ? WHERE usernum = ?'
+        )
+        .bind(message.split("(ASD)")[1],usernum)
+        .run()
+      }
+    }
 })
 export default app
