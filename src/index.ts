@@ -43,6 +43,7 @@ async function initializeDatabase(db: D1Database) {
         UUID TEXT UNIQUE NOT NULL,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        publicid TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -487,7 +488,13 @@ app.post('/api/auth/register', securityMiddleware, authMiddleware, async (c) => 
     const username: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE username = ?'
     ).bind(usernum).first();
-    if (username) {
+    if (username||username.username) {
+        return c.json({ error: 'username is error' }, 400)
+    }
+    const adminname: any = await c.env.DB.prepare(
+        'SELECT * FROM admin WHERE adminname = ?'
+    ).bind(usernum).first();
+    if (adminname||adminname.adminname) {
         return c.json({ error: 'username is error' }, 400)
     }
     const result = await c.env.DB.prepare(
@@ -539,7 +546,36 @@ app.post('/api/auth/adminrestart', securityMiddleware, authMiddleware, async (c)
     return c.json({ error: 'adminname already exists or database error' }, 400)
   }
 })
-
+//生成加密值
+app.post('/api/public/clientencry', securityMiddleware, async (c) => {
+  try{
+    const body = await c.req.json();
+    const sysKeys: any = await c.env.DB.prepare(
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind('default').first();
+    if (!sysKeys||!sysKeys.public_keyE||!sysKeys.private_keyF){
+        return c.json({ error: 'key not found' }, 400)
+    }
+    const privateKeyPem = sysKeys.private_keyF as string;
+    const decrypted=await decryptflare(privateKeyPem,body.encrypted) as string;
+    
+    if (!decrypted) {
+        return c.json({ error: 'encrypt not found' }, 400)
+    }
+    const publicKeyPem = sysKeys.public_keyE as string;
+    const encrypted=await encryptflare(publicKeyPem,decrypted);
+    return c.json({
+      success: true,
+      encrypted:encrypted
+    })
+  }catch (err: any) {
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
 // 获取公共密钥
 app.post('/api/public/findkey', securityMiddleware, async (c) => {
   try {
@@ -643,7 +679,7 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     // 2. 簽署生成 JWT Token (設定 24 小時後過期)
     const payload = {
       id: user.id,
-      username: user.username,
+      username: user.adminname,
       exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
     }
     const token = await sign(payload, c.env.JWT_SECRET);
@@ -652,7 +688,7 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     return c.json({
       success: true,
       token:encrypted,
-      username: user.username
+      adminname: user.adminname
     })
   } catch (err: any) {
     // 4. 捕獲並返回異常錯誤
@@ -692,6 +728,7 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
+
     if(!usernum||usernum!==user.username||usernum!==message.split("(ASD)")[0])return c.json({ error: 'Invalid username' },401)
       const mechinaId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE user_id = ?'
@@ -798,7 +835,7 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
   }  
 })
 //加入普通会员
-app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
+app.post("/api/protected/member", securityMiddleware, authMiddleware, async (c)=>{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
@@ -1011,11 +1048,13 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       adlist: Record<string, unknown>[];
       items: Record<string, unknown>[];
       custemail: Record<string, unknown>[];
+      memberlist: Record<string, unknown>[];
       userlist: Record<string, unknown>[];
     } = {
       adlist: [],
       items: [],
       custemail: [],
+      memberlist:[],
       userlist: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
@@ -1041,10 +1080,14 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
     const res3 = await c.env.DB.prepare(
         'SELECT * FROM member_start WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
+    const res4 = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
     if(res1.results.length>0)newObj.adlist.push(...res1.results);
     if(results.length>0)newObj.items.push(...results);
     if(res2.results.length>0)newObj.custemail.push(...res2.results);
-    if(res3.results.length>0)newObj.userlist.push(...res3.results);
+    if(res3.results.length>0)newObj.memberlist.push(...res3.results);
+    if(res4.results.length>0)newObj.userlist.push(...res4.results);
     return c.json({
         success: true,
         usernum: user.username,
