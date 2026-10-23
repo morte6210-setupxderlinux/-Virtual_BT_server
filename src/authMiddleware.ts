@@ -31,7 +31,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
         return c.json({ error: 'Usernum no found' }, 400)
     }
     if(!meObj.username||!reg1.test(meObj.username))return c.json({ error: 'Invalid username' }, 400);
-    if(!meObj.password||!reg2.test(meObj.password))return c.json({ error: 'Invalid password' }, 400);
+    if(meObj.password&&!reg2.test(meObj.password))return c.json({ error: 'Invalid password' }, 400);
     if(!meObj.nonce||meObj.nonce!==nonce)return c.json({ error: 'Invalid nonce' }, 400);
     //使用 c.set() 將解密後的資料掛載到上下文中
     // 你可以自訂一個鍵名，例如 'user' 或 'tokenPayload'
