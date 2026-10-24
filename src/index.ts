@@ -92,6 +92,7 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS user_sign (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        publicid TEXT,
         user_id INTEGER NOT NULL,
         usernum TEXT NOT NULL,
         UUID TEXT NOT NULL,
@@ -138,13 +139,31 @@ async function initializeDatabase(db: D1Database) {
       );
     `).run();
 
-    // 8. custemail表格
+    // 8. custemail,custcode,proaccount表格
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS custemail (
           publicid TEXT,
-          emailaunot TEXT,
-          custcode TEXT,
-          pubaunot TEXT,
+          typename TEXT,
+          enumber TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS custcode (
+          publicid TEXT,
+          codename TEXT,
+          codeimg TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS proaccount (
+          publicid TEXT,
+          proname TEXT,
+          proimg TEXT,
+          prourl TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -158,6 +177,7 @@ async function initializeDatabase(db: D1Database) {
           user_id INTEGER NOT NULL,
           usernum INTEGER NOT NULL,
           type TEXT NOT NULL,
+          expires TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -172,6 +192,7 @@ async function initializeDatabase(db: D1Database) {
           filename INTEGER NOT NULL,
           content INTEGER NOT NULL,
           file_key INTEGER NOT NULL,
+          publicid TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -197,7 +218,7 @@ function formatPem(buffer:ArrayBuffer, label:string) {
 //生成公用密钥
 async function addkeyendesign(db: D1Database){
   try{
-        const query = 'SELECT * FROM system_keys WHERE key_name = ? ORDER BY created_at DESC'
+        const query = 'SELECT * FROM system_keys WHERE key_name = ?'
         const res = await db.prepare(query)
           .bind("default")
           .all()
@@ -445,6 +466,77 @@ function generateRandom6Digits(): string {
   const randomNum = array[0] % 1000000;
   return String(randomNum).padStart(6, '0');
 }
+//签章会员特征值
+async function addsignkey(db: D1Database,userId: Number,message: string,usernum: string){
+    const mechinaId: any = await db.prepare(
+        'SELECT * FROM users WHERE user_id = ?'
+    ).bind(userId).first();
+    if(!mechinaId||!mechinaId.UUID)return null
+    // 1. 從資料庫讀出私鑰 PEM 字串
+    const dbKeyRecord: any = await db.prepare(
+        'SELECT * FROM user_keys WHERE user_id = ?'
+    ).bind(userId).first();
+    if(!dbKeyRecord||!dbKeyRecord.private_keyD)return null
+    const dbKeyRecord1: any = await db.prepare(
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind("default").first();
+    if(!dbKeyRecord1||!dbKeyRecord1.private_keyF)return null
+    const privateKeyPem = dbKeyRecord.private_keyD as string;
+    const privateKeyPem1 = dbKeyRecord1.private_keyF as string;
+    const expires=message.split("(ASD)")[2];
+    const subtype=message.split("(ASD)")[1];
+    const signatureBase64=await verifysign(privateKeyPem,usernum+mechinaId.UUID+expires+subtype) 
+    const adminlist: any = await db.prepare(
+        'SELECT * FROM admin WHERE publicid = ?'
+    ).bind('758805').first();
+    if(!adminlist||adminlist.adminname!=="17369622758")return null
+    const plantext=await decryptflare(privateKeyPem1,adminlist.password);
+    if(!plantext)return null
+    const password_base=btoa(plantext);
+    const sum=Math.floor(Math.random()*(signatureBase64.length-1));
+    const sign=signatureBase64.substring(0,sum)+password_base+signatureBase64.substring(sum,signatureBase64.length);
+    return {sign:sign,UUID:mechinaId.UUID}
+}
+async function setupsignvrifig(db: D1Database,userId: Number,message: string,usernum: string){
+    if(message.split("(ASD)")[0]==="add"){
+      const signObj=await addsignkey(db,userId,message,usernum) as any;
+      await db.prepare(
+        'INSERT INTO user_sign (user_id,usernum,UUID,expires,signature,type,publicid) VALUES (?,?,?,?,?,?,?)'
+      )
+      .bind(userId,usernum,signObj.UUID,message.split("(ASD)")[2],signObj.sign,message.split("(ASD)")[1],"758805")
+      .run()
+    }
+    if(message.split("(ASD)")[0]==="del"){
+        const query = 'SELECT * FROM user_sign WHERE usernum LIKE ? OR type LIKE ?'
+        const searchTerm1 = `%${usernum}%`
+        const searchTerm2 = `%${message.split("(ASD)")[1]}%`
+        const res: any = await db.prepare(query)
+        .bind(searchTerm1, searchTerm2).first()
+        if(res&&res.id){
+          await db.prepare(
+            'DELETE FROM user_sign WHERE id = '
+          )
+          .bind(res.id)
+          .run()
+        }
+    } 
+    if(message.split("(ASD)")[0]==="rest"){
+        const signObj=await addsignkey(db,userId,message,usernum) as any;
+        const query = 'SELECT * FROM user_sign WHERE usernum LIKE ? OR type LIKE ?'
+        const searchTerm1 = `%${usernum}%`
+        const searchTerm2 = `%${message.split("(ASD)")[1]}%`
+        const res: any = await db.prepare(query)
+        .bind(searchTerm1, searchTerm2).first()
+        if(res&&res.id){
+          await db.prepare(
+            'UPDATE user_sign SET type = ?,expires = ?,signature = ? WHERE id = ?'
+          )
+          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],signObj.sign,res.id)
+          .run()
+        } 
+    } 
+}
+
 // ----------------------------------------------------
 // 1. 公開路由 (Auth: 註冊與登入)
 // ----------------------------------------------------
@@ -579,7 +671,7 @@ app.post('/api/public/clientencry', securityMiddleware, async (c) => {
 // 获取公共密钥
 app.post('/api/public/findkey', securityMiddleware, async (c) => {
   try {
-    const query = 'SELECT * FROM system_keys WHERE key_name = ? ORDER BY created_at DESC'
+    const query = 'SELECT * FROM system_keys WHERE key_name = ?'
     const res = await c.env.DB.prepare(query)
       .bind("default")
       .all() 
@@ -722,7 +814,7 @@ app.post('/api/protected/me', (c) => {
     user: payload
   })
 })
-//签章高级会员特征值
+/** 
 app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -730,46 +822,7 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     const message=c.get("message")
 
     if(!usernum||usernum!==user.username||usernum!==message.split("(ASD)")[0])return c.json({ error: 'Invalid username' },401)
-      const mechinaId: any = await c.env.DB.prepare(
-        'SELECT * FROM users WHERE user_id = ?'
-    ).bind(user.id).first();
-    if(!mechinaId||!mechinaId.UUID)return c.json({ error: 'Invalid username' },401)
-    // 1. 從資料庫讀出私鑰 PEM 字串
-    const dbKeyRecord: any = await c.env.DB.prepare(
-        'SELECT * FROM user_keys WHERE user_id = ?'
-    ).bind(user.id).first();
-    if(!dbKeyRecord||!dbKeyRecord.private_keyD)return c.json({ 
-      success: false, 
-    }, 400) 
-    const dbKeyRecord1: any = await c.env.DB.prepare(
-        'SELECT * FROM system_keys WHERE key_name = ?'
-    ).bind("default").first();
-    if(!dbKeyRecord1||!dbKeyRecord1.private_keyF)return c.json({ 
-      success: false, 
-    }, 400) 
-    const privateKeyPem = dbKeyRecord.private_keyD as string;
-    const privateKeyPem1 = dbKeyRecord1.private_keyF as string;
-    const expires=message.split("(ASD)")[1];
-    const subtype=message.split("(ASD)")[2];
-    const signatureBase64=await verifysign(privateKeyPem,usernum+mechinaId.UUID+expires+subtype) 
-    const adminlist: any = await c.env.DB.prepare(
-        'SELECT * FROM admin WHERE publicid = ?'
-    ).bind('758805').first();
-    if(!adminlist||adminlist.adminname!=="17369622758")return c.json({ 
-      success: false, 
-    }, 400)
-    const plantext=await decryptflare(privateKeyPem1,adminlist.password);
-    if(!plantext)return c.json({ 
-      success: false, 
-    }, 400)
-    const password_base=btoa(plantext);
-    const sum=Math.floor(Math.random()*(signatureBase64.length-1));
-    const sign=signatureBase64.substring(0,sum)+password_base+signatureBase64.substring(sum,signatureBase64.length);
-    await c.env.DB.prepare(
-      'INSERT INTO user_sign (user_id,usernum,UUID,expires,signature) VALUES (?,?,?,?,?)'
-    )
-    .bind(user.id,usernum,mechinaId.UUID,expires,sign)
-    .run()
+    
 
 
   verifynext(signatureBase64)
@@ -833,19 +886,8 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
       error: err.message || 'Internal Server Error' 
     }, 500)
   }  
-})
-//加入普通会员
-app.post("/api/protected/member", securityMiddleware, authMiddleware, async (c)=>{
-    const user = c.get('jwtPayload')
-    const usernum = c.get('usernum')
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-    await c.env.DB.prepare(
-      'INSERT INTO member_start (user_id) VALUES (?)'
-    )
-    .bind(user.id)
-    .run()
-    return c.json({success:true,usernum:usernum})
-})
+})*/
+
 //产生与获取解禁码
 app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c)=>{
   try{  
@@ -896,7 +938,7 @@ app.post("/api/protected/useraddkey", securityMiddleware, authMiddleware, async 
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-    const query = 'SELECT * FROM user_keys WHERE user_id = ? ORDER BY created_at DESC'
+    const query = 'SELECT * FROM user_keys WHERE user_id = ?'
     const res = await c.env.DB.prepare(query)
       .bind(user.id)
       .all()
@@ -1038,7 +1080,7 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
     }, 500)
   }
 })
-//获取ADlink,paylist,custemail
+//获取ADlink,paylist,custemail,custcode,proaccount
 app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -1048,12 +1090,14 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       adlist: Record<string, unknown>[];
       items: Record<string, unknown>[];
       custemail: Record<string, unknown>[];
+      proaccount: Record<string, unknown>[];
       memberlist: Record<string, unknown>[];
       userlist: Record<string, unknown>[];
     } = {
       adlist: [],
       items: [],
       custemail: [],
+      proaccount:[],
       memberlist:[],
       userlist: []
     };
@@ -1130,24 +1174,92 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
         const result = await c.env.DB.prepare(
           'UPDATE ADlink SET title = ?,xuhao = ?,postname = ?,linkUrl = ?,expritime = ? WHERE urlId = ?'
         )
-        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[0])
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[1])
         .run()
       }
     }
 })
-//增删改email,cust,pubaunot
+//增删改email
 app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, async (c)=>{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
-        'SELECT * FROM custemail WHERE publicid = ?'
-    ).bind("758805").first();
-    if(!res||!res.urlId){
+        'SELECT * FROM custemail WHERE typename = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!res||!res.enumber){
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
-          'INSERT INTO custemail (emailaunot,custcode,pubaunot,publicid) VALUES (?,?,?,?)'
+          'INSERT INTO custemail (typename,enumber,publicid) VALUES (?,?,?)'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
+        .run()
+      }
+    }else{
+        if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM custemail WHERE typename = ?'
+        )
+        .bind(message.split("(ASD)")[1])
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE custemail SET enumber = ? WHERE typename = ?'
+        )
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
+        .run()
+      }
+    }
+})
+//增删改custcode
+app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, async (c)=>{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM custcode WHERE codename = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!res||!res.codeimg){
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO custcode (codename,codeimg,publicid) VALUES (?,?,?)'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
+        .run()
+      }
+    }else{
+        if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM custcode WHERE codename = ?'
+        )
+        .bind(message.split("(ASD)")[1])
+        .run()
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE custcode SET codeimg ? WHERE codename = ?'
+        )
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
+        .run()
+      }
+    }
+})
+//增删改proaccount
+app.post("/api/protected/adddelrest_account", securityMiddleware, authMiddleware, async (c)=>{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM proaccount WHERE proname = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!res||!res.proimg||!res.prourl){
+      if(message.split("(ASD)")[0]==="add"){
+        const result = await c.env.DB.prepare(
+          'INSERT INTO proaccount (proname,proimg,prourl,publicid) VALUES (?,?,?,?)'
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()
@@ -1155,22 +1267,21 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
     }else{
         if(message.split("(ASD)")[0]==="del"){
         const result = await c.env.DB.prepare(
-          'DELETE FROM custemail WHERE publicid = ?'
+          'DELETE FROM proaccount WHERE proname = ?'
         )
-        .bind("758805")
+        .bind(message.split("(ASD)")[1])
         .run()
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE custemail SET emailaunot = ?,custcode = ?,pubaunot = ? WHERE publicid = ?'
+          'UPDATE proaccount SET proimg = ?,prourl = ? WHERE proname = ?'
         )
-        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
       }
     }
 })
-
-//增删改paylist
+//增删改paylist,custcode
 app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, async (c)=>{
   const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
@@ -1179,12 +1290,12 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
     const res = await c.env.DB.prepare(
         'SELECT * FROM items WHERE content = ?'
     ).bind(message.split("(ASD)")[2]).first();
-    if(!res||!res.urlId){  
+    if(!res||!res.file_key){  
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
-          'INSERT INTO items (usernum,filename,content,file_key) VALUES (?,?,?,?)'
+          'INSERT INTO items (usernum,filename,content,file_key,publicid) VALUES (?,?,?,?,?)'
         )
-        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3])
+        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()
       }
     }else{
@@ -1206,20 +1317,22 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
 })
 //增删改会员标识
 app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware, async (c)=>{
-  const user = c.get('jwtPayload')
+    const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM member_start WHERE usernum = ?'
     ).bind(usernum).first();
-    if(!res||!res.urlId){
-      if(message.split("(ASD)")[0]==="add"){
+    if(!res||!res.type||!res.expires){
+      if(message.split("(ASD)")[0]==="add"){        
         const result = await c.env.DB.prepare(
-          'INSERT INTO member_start (usernum,user_id,type,publicid) VALUES (?,?,?,?)'
+          'INSERT INTO member_start (usernum,user_id,type,publicid,expires) VALUES (?,?,?,?,?)'
         )
-        .bind(usernum,user.id,message.split("(ASD)")[1],"758805")
+        .bind(usernum,user.id,message.split("(ASD)")[1],"758805",message.split("(ASD)")[2])
         .run()
+        //关联user_sign表格
+        setupsignvrifig(c.env.DB,user.id,message,usernum);
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
@@ -1227,14 +1340,18 @@ app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware,
           'DELETE FROM member_start WHERE usernum = ?'
         )
         .bind(usernum)
-        .run()
+        .run()        
+        //关联user_sign表格
+        setupsignvrifig(c.env.DB,user.id,message,usernum);
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE member_start SET type = ? WHERE usernum = ?'
+          'UPDATE member_start SET type = ?,expires = ? WHERE usernum = ?'
         )
-        .bind(message.split("(ASD)")[1],usernum)
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],usernum)
         .run()
+        //关联user_sign表格
+        setupsignvrifig(c.env.DB,user.id,message,usernum);
       }
     }
 })
