@@ -139,7 +139,7 @@ async function initializeDatabase(db: D1Database) {
       );
     `).run();
 
-    // 8. custemail,custcode,proaccount表格
+    // 8. custemail,custcode,proaccount,paylist表格
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS custemail (
           publicid TEXT,
@@ -164,6 +164,15 @@ async function initializeDatabase(db: D1Database) {
           proname TEXT,
           proimg TEXT,
           prourl TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS paylist (
+          publicid TEXT,
+          payname TEXT,
+          payimg TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -1088,16 +1097,18 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
     const message=c.get("message")
     const newObj: {
       adlist: Record<string, unknown>[];
-      items: Record<string, unknown>[];
       custemail: Record<string, unknown>[];
+      custcode: Record<string, unknown>[];
       proaccount: Record<string, unknown>[];
+      paylist: Record<string, unknown>[];
       memberlist: Record<string, unknown>[];
       userlist: Record<string, unknown>[];
     } = {
       adlist: [],
-      items: [],
       custemail: [],
+      custcode: [],
       proaccount:[],
+      paylist: [],
       memberlist:[],
       userlist: []
     };
@@ -1105,6 +1116,58 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       const res1 = await c.env.DB.prepare(
         'SELECT * FROM ADlink WHERE usernum = ? ORDER BY created_at DESC'
     ).bind(usernum).all();    
+    const res2 = await c.env.DB.prepare(
+        'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res3 = await c.env.DB.prepare(
+        'SELECT * FROM member_start WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res4 = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res5 = await c.env.DB.prepare(
+        'SELECT * FROM custcode WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res6 = await c.env.DB.prepare(
+        'SELECT * FROM proaccount WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res7 = await c.env.DB.prepare(
+        'SELECT * FROM paylist WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    if(res1.results.length>0)newObj.adlist.push(...res1.results);
+    if(res2.results.length>0)newObj.custemail.push(...res2.results);
+    if(res3.results.length>0)newObj.memberlist.push(...res3.results);
+    if(res4.results.length>0)newObj.userlist.push(...res4.results);
+    if(res5.results.length>0)newObj.custcode.push(...res5.results);
+    if(res6.results.length>0)newObj.proaccount.push(...res6.results);
+    if(res7.results.length>0)newObj.paylist.push(...res7.results);
+
+    return c.json({
+        success: true,
+        usernum: user.username,
+        newObj:newObj
+    })
+  } catch (err: any) {
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+//获取图片、文件
+app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (c)=>{
+  try{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    const newObj: {
+      items: Record<string, unknown>[];
+    } = {
+      items: []
+    };
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+        
       let results=[];
       if (message) {
         // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
@@ -1116,22 +1179,15 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
           .all()
         results = res.results as any;
       } else {
-        // 3. 如果沒有提供關鍵字，則返回空
+          // 3. 如果沒有提供關鍵字，則返回最近的全部數據（或限制筆數）
+        const res = await c.env.DB.prepare(
+          'SELECT * FROM items ORDER BY created_at DESC LIMIT 50'
+        ).all()
+        results = res.results as any;
       }
-    const res2 = await c.env.DB.prepare(
-        'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
-    ).bind("758805").all();
-    const res3 = await c.env.DB.prepare(
-        'SELECT * FROM member_start WHERE publicid = ? ORDER BY created_at DESC'
-    ).bind("758805").all();
-    const res4 = await c.env.DB.prepare(
-        'SELECT * FROM users WHERE publicid = ? ORDER BY created_at DESC'
-    ).bind("758805").all();
-    if(res1.results.length>0)newObj.adlist.push(...res1.results);
+    
     if(results.length>0)newObj.items.push(...results);
-    if(res2.results.length>0)newObj.custemail.push(...res2.results);
-    if(res3.results.length>0)newObj.memberlist.push(...res3.results);
-    if(res4.results.length>0)newObj.userlist.push(...res4.results);
+
     return c.json({
         success: true,
         usernum: user.username,

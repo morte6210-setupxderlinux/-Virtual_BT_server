@@ -40,11 +40,12 @@ async function nextpost(publicKeyF,privateKeyE){
         }
         return response.json();
     }).then(data=>{
-        if(!data.success)window.location.href=clientUrl;                
+        if(!data.success)window.location.href=clientUrl;  
+        nextimage();                     
         document.querySelector(".buttop>button:nth-child(1)").onclick=function(e){
             e.stopPropagation();
             document.querySelector(".main>.buttab2").style.display="block";
-            document.querySelector(".main>.buttab3").style.display="none";
+            document.querySelector(".main>.buttab3").style.display="none";            
             document.querySelector(".main>.buttab2>div:nth-child(2)>select").oninput=function(e){
                 e.stopPropagation();let This=this;
                 document.querySelector(".main>.buttab2>div:nth-child(2)>button").onclick=function(e){
@@ -62,6 +63,48 @@ async function nextpost(publicKeyF,privateKeyE){
     }).catch(err=>{
         console.log(err);
     })
+    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],postname="rest";
+    async function nextimage(){
+        const requestData={
+            username:JSON.parse(usernum).username,
+            password:"",
+            token:"",
+            message:"",
+            nonce:""
+        };
+        const nonce1 = generateRandom6Digits(); 
+        requestData.nonce=nonce1;
+        const timestamp1 = Math.floor(Date.now() / 1000).toString();
+        const encrypted10=await encryptflare(publicKeyF,JSON.stringify(requestData));
+        fetch(serverUrl+"/api/protected/findimage",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                'x-request-nonce': nonce1,
+                'x-request-timestamp': timestamp1,
+                "Authorization":`Bearer ${custtoken}`
+            },
+            body:JSON.stringify({encrypted:encrypted10})
+        }).then(response=>{
+            if(!response.ok){
+                throw new Error(`HTTP 错误！状态码：${response.status}`)
+            }
+            return response.json();
+        }).then(data=>{console.log(data)
+            items.push(...data.newObj.items);
+            let html10="";
+            if(items.length>0){
+                items.forEach((item,index)=>{
+                    html10+=`
+                        <li><img src="${item.file_key}"></li>
+                    `;
+                    if((index+1)===items.length)document.querySelector(".main>.buttab2>div:nth-child(3)>ul").innerHTML=html10;
+                })
+            }            
+        }).catch(err=>{
+            console.log(err);
+        })
+    }
     async function nextsetup(){
         const requestData={
             username:JSON.parse(usernum).username,
@@ -88,10 +131,16 @@ async function nextpost(publicKeyF,privateKeyE){
                 throw new Error(`HTTP 错误！状态码：${response.status}`)
             }
             return response.json();
-        }).then(data=>{
+        }).then(data=>{console.log(data)
             if(data.success&&data.usernum===JSON.parse(usernum).username){
                 const newObj=data.newObj;
-                let html1="",html2="",html3="",html4="",html5="",html6="",html7=""; 
+                let html1="",html2="",html3="",html4="",html5="",html6="",html7="",html8=""; 
+                adlist.push(...newObj.adlist);
+                custemail.push(...newObj.custemail);
+                custcode.push(...newObj.custcode);
+                proaccount.push(...newObj.proaccount);
+                paylist.push(...newObj.paylist);
+                memberlist.push(...newObj.memberlist);
                 if(newObj.userlist.length<1){
                     html7=`
                         <option></option>
@@ -99,202 +148,577 @@ async function nextpost(publicKeyF,privateKeyE){
                 }else{
                     newObj.userlist.forEach((item,index)=>{
                         html7+=`
-                            <option value="${item.usernum}">${item.usernum}</option>
+                            <option value="${item.username}">${item.username}</option>
                         `;
                     })
-                }               
+                }  
+                if(items.length<1){
+                    html8=`
+                        <option></option>
+                    `;
+                }else{
+                    items.forEach((item,index)=>{
+                        html8+=`
+                            <option value="${item.content}">${item.content}</option>
+                        `;
+                    })    
+                }        
                 if(newObj.adlist.length<1){
                     html1=`
                         <li>
                             <div><p>ID：</p><input type="text" disabled value="${generateRandom6Digits()+Date.now()}"></div>
-                            <div><p>归属：</p><select></select></div>
-                            <div><p>标题：</p><input type="text" value=""></div>
-                            <div><p>序号：</p><input type="text" value=""></div>
-                            <div><p>机构：</p><input type="text" value=""></div>
-                            <div><p>外链：</p><input type="text" value=""></div>
-                            <div><p>有效期：</p><input type="text" value=""></div>
-                            <div><button>修改</button><button>删除</button></div>
+                            <div><p>归属：</p><select disabled></select></div>
+                            <div><p>标题：</p><input type="text" value="" disabled></div>
+                            <div><p>序号：</p><input type="text" value="" disabled></div>
+                            <div><p>机构：</p><input type="text" value="" disabled></div>
+                            <div><p>外链：</p><input type="text" value="" disabled></div>
+                            <div><p>有效期：</p><input type="text" value="" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(1)>ul").innerHTML=html1;
                     document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item)=>{
-                        item.querySelector("div:nth-child(1)>select").innerHTML=html7;
+                        item.querySelector("div:nth-child(2)>select").innerHTML=html7;
                     })
                 }else{
-                newObj.adlist.forEach((item,index)=>{
-                    html1+=`
+                    newObj.adlist.forEach((item,index)=>{
+                        html1+=`
+                            <li>
+                                <div><p>ID：</p><input type="text" value="${item.urlId}" disabled></div>
+                                <div><p>归属：</p><select disabled></select></div>
+                                <div><p>标题：</p><input type="text" value="${item.title}" disabled></div>
+                                <div><p>序号：</p><input type="text" value="${item.xuhao}" disabled></div>
+                                <div><p>机构：</p><input type="text" value="${item.postname}" disabled></div>
+                                <div><p>外链：</p><input type="text" value="${item.linkUrl}" disabled></div>
+                                <div><p>有效期：</p><input type="text" value="${item.expritime}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.adlist.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(1)>ul").innerHTML=html1;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(2)>select").innerHTML=html7;
+                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item1)=>{
+                                    if(newObj.adlist[index2].usernum===item1.value)item1.selected=true;
+                                })
+                            })
+                        }
+                    })
+                }
+                if(newObj.custemail.length<1){
+                    html2=`
                         <li>
-                            <div><p>ID：</p><input type="text" value="${item.urlId}"></div>
-                            <div><p>归属：</p><select></select></div>
-                            <div><p>标题：</p><input type="text" value="${item.title}"></div>
-                            <div><p>序号：</p><input type="text" value="${item.xuhao}"></div>
-                            <div><p>机构：</p><input type="text" value="${item.postname}"></div>
-                            <div><p>外链：</p><input type="text" value="${item.linkUrl}"></div>
-                            <div><p>有效期：</p><input type="text" value="${item.expritime}"></div>
-                            <div><button>修改</button><button>删除</button></div>
+                            <div><p>归属：</p><select disabled><option value="devpro">devpro</option><option value="cust">cust</option></select></div>
+                            <div><p>邮箱号：</p><input type="text" value="" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
-                    if((index+1)===newObj.adlist.length){
-                        document.querySelector(".main>.buttab3>div:nth-child(1)>ul").innerHTML=html1;
-                        document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
-                            item.querySelector("div:nth-child(1)>select").innerHTML=html7;
-                            item.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                if(newObj.adlist[index].usernum===item1.value)item1.selected=true;
+                    document.querySelector(".main>.buttab3>div:nth-child(2)>ul").innerHTML=html2;
+                }else{
+                    newObj.custemail.forEach((item,index)=>{
+                        html2+=`
+                            <li>
+                                <div><p>归属：</p><select disabled><option value="devpro">devpro</option><option value="cust">cust</option></select></div>
+                                <div><p>邮箱号：</p><input type="text" value="${item.enumber}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.custemail.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(2)>ul").innerHTML=html2;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.custemail[index2].typename===item1.value)item1.selected=true;
+                                })
                             })
-                        })
-                    }
-                })}
-                const devpro=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].emailaunot).devpro?JSON.parse(newObj.custemail[0].emailaunot).devpro:"");
-                const cust=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].emailaunot).cust?JSON.parse(newObj.custemail[0].emailaunot).cust:"");
-                html2=`
-                    <li>
-                        <div><p>归属：</p><input type="text" value="开发者"></div>
-                        <div><p>邮箱号：</p><input type="text" value="${devpro}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                    <li>
-                        <div><p>归属：</p><input type="text" value="客服"></div>
-                        <div><p>邮箱号：</p><input type="text" value="${cust}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                `;
-                document.querySelector(".main>.buttab3>div:nth-child(2)>ul").innerHTML=html2;
-                const LINE=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].custcode).LINE?JSON.parse(newObj.custemail[0].custcode).LINE:"");
-                const WHATSAPP=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].custcode).WHATSAPP?JSON.parse(newObj.custemail[0].custcode).WHATSAPP:"");
-                html3=`
-                    <li>
-                        <div><p>归属：</p><input type="text" value="LINE"></div>
-                        <div><p>链接：</p><input type="text" value="${LINE}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                    <li>
-                        <div><p>归属：</p><input type="text" value="WHATSAPP"></div>
-                        <div><p>链接：</p><input type="text" value="${WHATSAPP}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                `;
-                document.querySelector(".main>.buttab3>div:nth-child(3)>ul").innerHTML=html3;
-                const XCOM_img=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot)[X.COM].img?JSON.parse(newObj.custemail[0].pubaunot)[X.COM].img:"");
-                const XCOM_url=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot)[X.COM].url?JSON.parse(newObj.custemail[0].pubaunot)[X.COM].url:"");
-                const YOUTUBE_img=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).YOUTUBE.img?JSON.parse(newObj.custemail[0].pubaunot).YOUTUBE.img:"");
-                const YOUTUBE_url=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).YOUTUBE.url?JSON.parse(newObj.custemail[0].pubaunot).YOUTUBE.url:"");
-                const FACEBOOK_img=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).FACEBOOK.img?JSON.parse(newObj.custemail[0].pubaunot).FACEBOOK.img:"");
-                const FACEBOOK_url=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).FACEBOOK.url?JSON.parse(newObj.custemail[0].pubaunot).FACEBOOK.url:"");
-                const TELEGRAM_img=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).TELEGRAM.img?JSON.parse(newObj.custemail[0].pubaunot).TELEGRAM.img:"");
-                const TELEGRAM_url=!newObj.custemail[0]?"":(JSON.parse(newObj.custemail[0].pubaunot).TELEGRAM.url?JSON.parse(newObj.custemail[0].pubaunot).TELEGRAM.url:"");
-                html4=`
-                    <li>
-                        <div><p>归属：</p><input type="text" value="X.COM"></div>
-                        <div><p>头像：</p><input type="text" value="${XCOM_img}"></div>
-                        <div><p>链接：</p><input type="text" value="${XCOM_url}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                    <li>
-                        <div><p>归属：</p><input type="text" value="YOUTUBE"></div>
-                        <div><p>头像：</p><input type="text" value="${YOUTUBE_img}"></div>
-                        <div><p>链接：</p><input type="text" value="${YOUTUBE_url}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                    <li>
-                        <div><p>归属：</p><input type="text" value="FACEBOOK"></div>
-                        <div><p>头像：</p><input type="text" value="${FACEBOOK_img}"></div>
-                        <div><p>链接：</p><input type="text" value="${FACEBOOK_url}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                    <li>
-                        <div><p>归属：</p><input type="text" value="TELEGRAM"></div>
-                        <div><p>头像：</p><input type="text" value="${TELEGRAM_img}"></div>
-                        <div><p>链接：</p><input type="text" value="${TELEGRAM_url}"></div>
-                        <div><button>修改</button><button>删除</button></div>
-                    </li>
-                `;
-                document.querySelector(".main>.buttab3>div:nth-child(4)>ul").innerHTML=html4;
-                if(newObj.items.length<1){
+                        }
+                    })
+                }
+                if(newObj.custcode.length<1){
+                    html3=`
+                        <li>
+                            <div><p>归属：</p><select disabled></select></div>
+                            <div><p>链接：</p><input type="text" value="" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
+                        </li>
+                    `;
+                    document.querySelector(".main>.buttab3>div:nth-child(3)>ul").innerHTML=html3;
+                    document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2)=>{
+                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                    })
+                }else{
+                    newObj.custcode.forEach((item,index)=>{
+                        html3+=`
+                            <li>
+                                <div><p>归属：</p><select disabled></select></div>
+                                <div><p>链接：</p><input type="text" value="${item.codeimg}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.custcode.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(3)>ul").innerHTML=html3;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.custcode[index2].codename===item1.value)item1.selected=true;
+                                })
+                            })
+                        }
+                    })
+                }
+                if(newObj.proaccount.length<1){
+                    html4=`
+                        <li>
+                            <div><p>归属：</p><select disabled></select></div>
+                            <div><p>头像：</p><input type="text" value="" disabled></div>
+                            <div><p>链接：</p><input type="text" value="" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
+                        </li>
+                    `;
+                    document.querySelector(".main>.buttab3>div:nth-child(4)>ul").innerHTML=html4;
+                    document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item2)=>{
+                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                    })
+                }else{
+                    newObj.proaccount.forEach((item,index)=>{
+                        html4+=`
+                            <li>
+                                <div><p>归属：</p><select disabled></select></div>
+                                <div><p>头像：</p><input type="text" value="${item.proimg}" disabled></div>
+                                <div><p>链接：</p><input type="text" value="${item.prourl}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.proaccount.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(4)>ul").innerHTML=html4;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.proaccount[index2].codename===item1.value)item1.selected=true;
+                                })
+                            })
+                        }
+                    })
+                }
+                if(newObj.paylist.length<1){
                     html5=`
                         <li>
-                            <div><p>归属：</p><input type="text" value=""></div>
-                            <div><p>链接：</p><input type="text" value=""></div>
-                            <div><button>修改</button><button>删除</button></div>
+                            <div><p>归属：</p><select disabled></select></div>
+                            <div><p>链接：</p><input type="text" value="" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(5)>ul").innerHTML=html5; 
+                    document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item2)=>{
+                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                    })
                 }else{
-                newObj.items.forEach((item,index)=>{
-                    if(item.content==="paypal"||item.content==="wise"){
+                    newObj.paylist.forEach((item,index)=>{
                         html5+=`
                             <li>
-                                <div><p>归属：</p><input type="text" value="${item.content}"></div>
-                                <div><p>链接：</p><input type="text" value="${item.file_key}"></div>
-                                <div><button>修改</button><button>删除</button></div>
+                                <div><p>归属：</p><select disabled></select></div>
+                                <div><p>链接：</p><input type="text" value="${item.payimg}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
-                    } 
-                    if((index+1)===newObj.items.length)document.querySelector(".main>.buttab3>div:nth-child(5)>ul").innerHTML=html5; 
-                })}
+                        if((index+1)===newObj.paylist.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(5)>ul").innerHTML=html5;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.paylist[index2].payname===item1.value)item1.selected=true;
+                                })
+                            })
+                        }
+                    })
+                }
                 if(newObj.memberlist.length<1){
                     html6=`
                         <li>
-                            <div><p>账户ID：</p><select></select></div>
-                            <div><p>账户类别：</p><select><option value="" selected></option><option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option></select></div>
-                            <div><button>修改</button><button>删除</button></div>
+                            <div><p>归属：</p><select disabled></select></div>
+                            <div><p>账户类别：</p><select disabled></select></div>
+                            <div><p>有效期：</p><input type="text" disabled></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(6)>ul").innerHTML=html6; 
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item)=>{
-                        item.querySelector("div:nth-child(1)>select").innerHTML=html7;
+                    document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item2)=>{
+                        item2.querySelector("div:nth-child(1)>select").innerHTML=html7;
+                        item2.querySelector("div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
                     })
                 }else{
-                newObj.memberlist.forEach((item,index)=>{
-                    html6+=`
-                        <li>
-                            <div><p>账户ID：</p><input type="text" disabled value="${item.usernum}"></div>
-                            <div><p>账户类别：</p><select><option value="${item.type}" selected>${item.type}</option><option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option></select></div>
-                            <div><button>修改</button><button>删除</button></div>
-                        </li>
-                    `;
-                    if((index+1)===newObj.memberlist.length){
-                        document.querySelector(".main>.buttab3>div:nth-child(6)>ul").innerHTML=html6; 
-                        document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item)=>{
-                            item.querySelector("div:nth-child(1)>select").innerHTML=html7;
-                            item.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                if(newObj.memberlist[index].usernum===item1.value)item1.selected=true;
+                    newObj.memberlist.forEach((item,index)=>{
+                        html6+=`
+                            <li>
+                                <div><p>归属：</p><select disabled></select></div>
+                                <div><p>账户类别：</p><select disabled></select></div>
+                                <div><p>有效期：</p><input type="text" value="${item.expires}" disabled></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.memberlist.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(6)>ul").innerHTML=html6; 
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(1)>select").innerHTML=html7;
+                                item2.querySelector("div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.memberlist[index2].usernum===item1.value)item1.selected=true;
+                                })
+                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item1)=>{
+                                    if(newObj.memberlist[index2].type===item1.value)item1.selected=true;
+                                })
                             })
-                        })
-                    }
-                })}
-                nextsetdata();
+                        }
+                    })
+                }
+                nextsetdata(html7,html8);
             }
         }).catch(err=>{
             console.log(err);
         })
     }
-    function nextsetdata(){
-        const setdata={};
+    function nextsetdata(html7,html8){ 
+        nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();    
         document.querySelector(".main>.buttab3>div:nth-child(1)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
-            let LI=document.createElement("li");
-            
-        }
-        document.querySelector(".main>.buttab3>div:nth-child(2)>.hdiv>button").onclick=function(e){
-            e.stopPropagation();
-            
-        }
-        document.querySelector(".main>.buttab3>div:nth-child(3)>.hdiv>button").onclick=function(e){
-            e.stopPropagation();
-            
-        }
-        document.querySelector(".main>.buttab3>div:nth-child(4)>.hdiv>button").onclick=function(e){
-            e.stopPropagation();
-            
-        }
-        document.querySelector(".main>.buttab3>div:nth-child(5)>.hdiv>button").onclick=function(e){
-            e.stopPropagation();
-            
+            if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(6)>input").value)return "有空白的表单未完成"
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>ID：</p><input type="text" disabled value="${generateRandom6Digits()+Date.now()}"></div>
+                <div><p>归属：</p><select disabled></select></div>
+                <div><p>标题：</p><input type="text" value="" disabled></div>
+                <div><p>序号：</p><input type="text" value="" disabled></div>
+                <div><p>机构：</p><input type="text" value="" disabled></div>
+                <div><p>外链：</p><input type="text" value="" disabled></div>
+                <div><p>有效期：</p><input type="text" value="" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(1)>ul").insertBefore(newLI,oldLI);
+            document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(2)>select").innerHTML=html7;
+            postname="add";nextadlink();
         }
         document.querySelector(".main>.buttab3>div:nth-child(6)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
-            
+            if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(2)>select").value)return alert("有空白的表单未完成");
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled></select></div>
+                <div><p>账户类别：</p><select disabled></select></div>
+                <div><p>有效期：</p><input type="text" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(6)>ul").insertBefore(newLI,oldLI);
+            document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").innerHTML=html7;
+            document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+            postname="add";nextmember();
         }
+    }
+    function nextadlink(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(8)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(2)>select").disabled=false;
+                item.querySelector("div:nth-child(3)>input").disabled=false;
+                item.querySelector("div:nth-child(4)>input").disabled=false;
+                item.querySelector("div:nth-child(5)>input").disabled=false;
+                item.querySelector("div:nth-child(6)>input").disabled=false;
+                item.querySelector("div:nth-child(7)>input").disabled=false;
+                item.querySelector("div:nth-child(8)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(8)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(1)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");                        
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(1)>ul"));                        
+                }
+            }
+        })
+    };
+    function nextcustemail(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(2)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>input").disabled=false;
+                item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(2)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");                        
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(2)>ul"));                        
+                }
+            }
+        })
+    };
+    function nextcustcode(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>input").disabled=false;
+                item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(3)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");                        
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(3)>ul"));                        
+                }
+            }
+        })
+    };
+    function nextproaccount(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(4)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>input").disabled=false;
+                item.querySelector("div:nth-child(3)>input").disabled=false;
+                item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(4)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");                        
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(4)>ul"));                        
+                }
+            }
+        })
+    };
+    function nextpaylist(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>input").disabled=false;
+                item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(5)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");                        
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(5)>ul"));                        
+                }
+            }
+        })
+    };
+    function nextmember(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(4)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>select").disabled=false;
+                item.querySelector("div:nth-child(3)>input").disabled=false;
+                item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:postname+"(ASD)",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&memberlist[0].usernum){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(6)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)"));
+                        postname="rest";
+                        return alert("有空白表单未处理");
+                    }
+                    const pathurl="";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+"",
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(6)>ul"));                        
+                }
+            }
+        })
+    };
+    
+    function postserver(pathurl,nonce0,timestamp0,encrypted0,item0,nodent){
+        fetch(serverUrl+pathurl,{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                'x-request-nonce': nonce0,
+                'x-request-timestamp': timestamp0,
+                "Authorization":`Bearer ${custtoken}`
+            },
+            body:JSON.stringify({encrypted:encrypted0})
+        }).then(response=>{
+            if(!response.ok){
+                throw new Error(`HTTP 错误！状态码：${response.status}`)
+            }
+            return response.json();
+        }).then(data=>{
+            console.log(data);
+            if(nodent&&item0)nodent.removeChild(item0);
+            postname="rest";
+        }).catch(err=>{
+            console.log(err);
+        })
     }
     function uploadfile(user_id,message){
         const fileInput = document.getElementById('fileInput');
@@ -319,31 +743,13 @@ async function nextpost(publicKeyF,privateKeyE){
             const result = await response.json();
             console.log('上傳結果：', result);
             if(result.success){
-                let LI=document.createElement("li");
-                let html=`<li><img src="${imgUrl+result.fileUrl}"></li>`;
-                document.querySelector(".main>.buttab2>div:nth-child(3)>ul").appendChild(LI);
-                document.querySelector(".main>.buttab2>div:nth-child(3)>ul>li:nth-last-child(1)").innerHTML=html;
+                let newLI=document.createElement("li");
+                let oldLI=document.querySelector(".main>.buttab2>div:nth-child(3)>ul>li:nth-child(1)");
+                let html=`<img src="${imgUrl+result.fileUrl}">`;
+                document.querySelector(".main>.buttab2>div:nth-child(3)>ul").insertBefore(newLI,oldLI);
+                document.querySelector(".main>.buttab2>div:nth-child(3)>ul>li:nth-child(1)").innerHTML=html;
             }
         }
-    }
-    function postserver(pathurl,encrypted12){
-        fetch(serverUrl+pathurl,{
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json",
-                "Authorization":`Bearer ${custtoken}`
-            },
-            body:JSON.stringify({encrypted:encrypted12})
-        }).then(response=>{
-            if(!response.ok){
-                throw new Error(`HTTP 错误！状态码：${response.status}`)
-            }
-            return response.json();
-        }).then(data=>{
-
-        }).catch(err=>{
-            console.log(err);
-        })
     }
 }
 function encryptflare(pem,str){
@@ -355,7 +761,6 @@ function encryptflare(pem,str){
             }
             // 選擇對應的公鑰欄位（請對齊你的資料庫欄位名稱，此處以 public_keyE 為例）
             const pkBuffer = pemToArrayBuffer(pem);
-
             // 【關鍵修正】必須先 import 成 CryptoKey 物件
             const publicKey = await crypto.subtle.importKey(
             "spki",
