@@ -197,8 +197,6 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          usernum INTEGER NOT NULL,
-          filename INTEGER NOT NULL,
           content INTEGER NOT NULL,
           file_key INTEGER NOT NULL,
           publicid TEXT,
@@ -770,8 +768,7 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     const user: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
-      .bind(usernum)
-      .first()
+    .bind(usernum).first()
     
     if (!user&&user.password!==passwordHash) {
       return c.json({ error: 'Invalid adminname or password' }, 401)
@@ -1052,7 +1049,11 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
     const decrypted=await decryptflare(sysKeys.private_keyF,decodeURIComponent(encrypted)) as string;
     const user_id=JSON.parse(decrypted).user_id;
     const message=JSON.parse(decrypted).message;
-    if(!user_id||parseInt(user_id)!==user.id)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!user_id||parseInt(user_id)!==user.id||!adminobj)return c.json({ error: 'Invalid adminname' },401)
     
     const body = await c.req.parseBody()
     const file = body['file'] as File
@@ -1071,9 +1072,9 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
 
     // 寫入 D1
     await c.env.DB.prepare(
-      'INSERT INTO items (filename, content, file_key,usernum) VALUES (?, ?, ?,?)'
+      'INSERT INTO items (content, file_key) VALUES (?,?)'
     )
-      .bind(file.name, message, fileKey,user.username)
+      .bind( message, fileKey,user)
       .run()
 
     return c.json({
@@ -1094,7 +1095,6 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
   try{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const message=c.get("message")
     const newObj: {
       adlist: Record<string, unknown>[];
       custemail: Record<string, unknown>[];
@@ -1171,11 +1171,10 @@ app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (
       let results=[];
       if (message) {
         // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
-        const query = 'SELECT * FROM items WHERE usernum LIKE ? OR content LIKE ? ORDER BY created_at DESC'
-        const searchTerm1 = `%${usernum}%`
+        const query = 'SELECT * FROM items WHERE content LIKE ? ORDER BY created_at DESC'
         const searchTerm2 = `%${message}%`
         const res = await c.env.DB.prepare(query)
-          .bind(searchTerm1, searchTerm2)
+          .bind(searchTerm2)
           .all()
         results = res.results as any;
       } else {
@@ -1206,7 +1205,11 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM ADlink WHERE urlId = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1240,7 +1243,11 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE typename = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1274,7 +1281,11 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM custcode WHERE codename = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1308,7 +1319,11 @@ app.post("/api/protected/adddelrest_account", securityMiddleware, authMiddleware
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM proaccount WHERE proname = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1337,21 +1352,25 @@ app.post("/api/protected/adddelrest_account", securityMiddleware, authMiddleware
       }
     }
 })
-//增删改paylist,custcode
+//增删改paylist
 app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, async (c)=>{
-  const user = c.get('jwtPayload')
+    const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM items WHERE content = ?'
     ).bind(message.split("(ASD)")[2]).first();
     if(!res||!res.file_key){  
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
-          'INSERT INTO items (usernum,filename,content,file_key,publicid) VALUES (?,?,?,?,?)'
+          'INSERT INTO items (content,file_key,publicid) VALUES (?,?,?,?,?)'
         )
-        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
         .run()
       }
     }else{
@@ -1359,14 +1378,14 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
         const result = await c.env.DB.prepare(
           'DELETE FROM items WHERE content = ?'
         )
-        .bind(message.split("(ASD)")[2])
+        .bind(message.split("(ASD)")[1])
         .run()
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE items SET filename = ?,file_key = ? WHERE content = ?'
+          'UPDATE items SET file_key = ? WHERE content = ?'
         )
-        .bind(message.split("(ASD)")[1],message.split("(ASD)")[3],message.split("(ASD)")[2])
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
         .run()
       }
     }
@@ -1376,19 +1395,23 @@ app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware,
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
-    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM member_start WHERE usernum = ?'
-    ).bind(usernum).first();
+    ).bind(message.split("(ASD)")[1]).first();
     if(!res||!res.type||!res.expires){
       if(message.split("(ASD)")[0]==="add"){        
         const result = await c.env.DB.prepare(
           'INSERT INTO member_start (usernum,user_id,type,publicid,expires) VALUES (?,?,?,?,?)'
         )
-        .bind(usernum,user.id,message.split("(ASD)")[1],"758805",message.split("(ASD)")[2])
+        .bind(message.split("(ASD)")[1],user.id,message.split("(ASD)")[2],"758805",message.split("(ASD)")[3])
         .run()
         //关联user_sign表格
-        setupsignvrifig(c.env.DB,user.id,message,usernum);
+        setupsignvrifig(c.env.DB,user.id,message,message.split("(ASD)")[1]);
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
