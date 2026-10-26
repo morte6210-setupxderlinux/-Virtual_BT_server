@@ -90,7 +90,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 throw new Error(`HTTP 错误！状态码：${response.status}`)
             }
             return response.json();
-        }).then(data=>{console.log(data)
+        }).then(data=>{
             items.push(...data.newObj.items);
             let html10="";
             if(items.length>0){

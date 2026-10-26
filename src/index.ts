@@ -40,10 +40,10 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        UUID TEXT UNIQUE NOT NULL,
-        username TEXT UNIQUE NOT NULL,
+        UUID TEXT NOT NULL,
+        username TEXT NOT NULL,
         password_hash TEXT NOT NULL,
-        publicid TEXT,
+        publicid TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -53,8 +53,8 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS admin (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        publicid TEXT,
-        adminname TEXT UNIQUE NOT NULL,
+        publicid TEXT NOT NULL,
+        adminname TEXT NOT NULL,
         password TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -65,7 +65,7 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS system_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        key_name TEXT UNIQUE NOT NULL,
+        key_name TEXT NOT NULL,
         public_keyE TEXT NOT NULL,
         private_keyE TEXT NOT NULL,
         public_keyF TEXT NOT NULL,
@@ -79,7 +79,7 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS user_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT UNIQUE NOT NULL,
+        user_id INTEGER NOT NULL,
         public_keyD TEXT NOT NULL,
         private_keyD TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -142,37 +142,38 @@ async function initializeDatabase(db: D1Database) {
     // 8. custemail,custcode,proaccount,paylist表格
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS custemail (
-          publicid TEXT,
-          typename TEXT,
-          enumber TEXT,
+          publicid TEXT NOT NULL,
+          typename TEXT NOT NULL,
+          enumber TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `).run();
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS custcode (
-          publicid TEXT,
-          codename TEXT,
-          codeimg TEXT,
+          publicid TEXT NOT NULL,
+          codename TEXT NOT NULL,
+          codeimg TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `).run();
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS proaccount (
-          publicid TEXT,
-          proname TEXT,
-          proimg TEXT,
-          prourl TEXT,
+          publicid TEXT NOT NULL,
+          proname TEXT NOT NULL,
+          proimg TEXT NOT NULL,
+          prourl TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `).run();
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS paylist (
-          publicid TEXT,
-          payname TEXT,
-          payimg TEXT,
+          publicid TEXT NOT NULL,
+          payname TEXT NOT NULL,
+          payimg TEXT NOT NULL,
+          payurl TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -182,9 +183,9 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS member_start (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          publicid TEXT,
+          publicid TEXT NOT NULL,
           user_id INTEGER NOT NULL,
-          usernum INTEGER NOT NULL,
+          usernum TEXT NOT NULL,
           type TEXT NOT NULL,
           expires TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -197,9 +198,21 @@ async function initializeDatabase(db: D1Database) {
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          content INTEGER NOT NULL,
-          file_key INTEGER NOT NULL,
-          publicid TEXT,
+          content TEXT NOT NULL,
+          file_key TEXT NOT NULL,
+          publicid TEXT NOT NULL,,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `).run();
+      //付款类型描述typepays
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS typepays (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          content TEXT NOT NULL,
+          typename TEXT NOT NULL,
+          price TEXT NOT NULL,
+          publicid TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -695,6 +708,81 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
     return c.json({ 
       success: false, 
     }, 400)
+    
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+// 获取付款分类描述
+app.post('/api/auth/payselect', securityMiddleware, async (c) => {
+  try {
+    const body = await c.req.json();
+    const nonce = c.req.header('x-request-nonce');
+    const query = 'SELECT * FROM system_keys WHERE key_name = ?'
+    const res = await c.env.DB.prepare(query)
+      .bind("default")
+      .all() 
+    if(res.results.length>0&&res.results[0].public_keyE&&res.results[0].private_keyF){
+        const privateKeyPem = res.results[0].private_keyF as string;
+        const decrypted=await decryptflare(privateKeyPem,body.encrypted) as string;
+        if(nonce!==JSON.parse(decrypted).nonce)return c.json({success: false}, 400);
+        
+        const query1 = 'SELECT * FROM paylist WHERE publicid = ?'
+        const res1:any = await c.env.DB.prepare(query1).bind("758805").all();
+        const query2 = 'SELECT * FROM typepays WHERE publicid = ?'
+        const res2:any = await c.env.DB.prepare(query2).bind("758805").all();  
+        if(!res1||!res1.results[0]||!res2||!res2.results[0])return c.json({success: false,}, 400);
+        let message="";
+        [...res1.results].forEach((item)=>{
+          if(item.payname==="paypal")message+=encodeURIComponent(item.payurl);
+          if(item.payname==="wise")message+=encodeURIComponent(item.payurl);
+        })
+        const setupArr=[] as any;
+        [...res2.results].forEach(async (item1,index1) => {
+          if(item1.typename==="donate"){
+            setupArr.push({
+              value:"donate",
+              name:"捐赠",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })          
+          }
+          if(item1.typename==="subscription"){
+            setupArr.push({
+              value:"subscription",
+              name:"订阅",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })
+          }
+          if(item1.typename==="lifetime"){
+            setupArr.push({
+              value:"lifetime",
+              name:"终身",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })
+          }
+          if((index1+1)===[...res2.results].length){
+            const publicKeyPem = res.results[0].public_keyE as string;
+            const encrypted=await encryptflare(publicKeyPem,message);
+            return c.json({
+                success: true, 
+                encrypted:encrypted,
+                setupArr:setupArr
+            })
+          }
+        });
+    }
+
+    return c.json({success: false,}, 400)
     
   } catch (err: any) {console.log(err)
     // 4. 捕獲並返回異常錯誤

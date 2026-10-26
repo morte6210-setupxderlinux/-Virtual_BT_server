@@ -2,6 +2,7 @@ const clientUrl=config.clientUrl;
 const serverUrl=config.serverUrl;
 const nonce = generateRandom6Digits(); // 隨機數
 const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
+
 fetch(serverUrl+"/api/public/findkey",{
     method:"POST",
     headers:{
@@ -19,142 +20,140 @@ fetch(serverUrl+"/api/public/findkey",{
 }).catch(err=>{
     console.log(err);
 })
-function nextpost(publicKeyF,privateKeyE){
-    const inputvalue={username:"",password:"",message:"",subtag:"login",nonce:""};
-    document.querySelector(".main>div:nth-child(1)>button:nth-child(1)").onclick=function(e){
-        e.stopPropagation();
-        document.querySelector(".main>div:nth-child(4)").style.display="none";
-        inputvalue.subtag="login";
-    }
-    document.querySelector(".main>div:nth-child(1)>button:nth-child(2)").onclick=function(e){
-        e.stopPropagation();
-        document.querySelector(".main>div:nth-child(4)").style.display="flex";
-        inputvalue.subtag="restart";
-    }
-    const reg1=/^([\w.-]+@[\w.-]+\.\w+|1[3-9]\d{9})$/;
-    const reg2=/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
-    
-    document.querySelector(".main>div:nth-child(2)>input").oninput=function(e){
-        e.stopPropagation();
-        let This=this;
-        if(reg1.test(This.value))inputvalue.username=this.value;
-        e.stopPropagation();
-    }
-    document.querySelector(".main>div:nth-child(3)>input").oninput=function(e){
-        e.stopPropagation();
-        let This=this;
-        e.stopPropagation();
-        if(reg2.test(This.value))inputvalue.password=this.value;
-    }
-    document.querySelector(".main>div:nth-child(4)>input").oninput=function(e){
-        e.stopPropagation();
-        let This=this;
-        if(reg2.test(This.value))inputvalue.message=this.value;
-    }
-    document.querySelector(".main>div:nth-child(5)>button").onclick=async function(e){
-        e.stopPropagation();
-        if(inputvalue.subtag==="login"){
-            alert("你需要登录吗？");
-            if(inputvalue.username&&inputvalue.password&&inputvalue.subtag){
-                function nextlogin(){
-                    return new Promise(async (resolve)=>{
-                        const nonce2 = generateRandom6Digits();
-                        const timestamp2 = Math.floor(Date.now() / 1000).toString();  
-                        inputvalue.nonce=nonce2;inputvalue.password="";           
-                        const encrypted2=await encryptflare(publicKeyF,JSON.stringify(inputvalue));
-                        fetch(serverUrl+"/api/public/clientencry",{
-                            method:"POST",
-                            headers:{
-                                "Content-Type":"application/json",
-                                'x-request-nonce': nonce2,
-                                'x-request-timestamp': timestamp2,
-                            },
-                            body:JSON.stringify({encrypted:encrypted2})
-                        }).then(response1=>{
-                            if(!response1.ok){
-                                throw new Error(`HTTP 错误！状态码：${response1.status}`)
-                            }
-                            return response1.json();
-                        }).then(data1=>{
-                            resolve(data1.encrypted)
-                        }).catch(err=>{
-                            resolve(err+"1122");
-                        })
-                    })
-                        
-                }
-                const nonce1 = generateRandom6Digits();
-                const timestamp1 = Math.floor(Date.now() / 1000).toString(); 
-                inputvalue.nonce=nonce1;
-                const encrypted1=await encryptflare(publicKeyF,JSON.stringify(inputvalue));
-                fetch(serverUrl+"/api/auth/adminlogin",{
-                    method:"POST",
-                    headers:{
-                        "Content-Type":"application/json",
-                        'x-request-nonce': nonce1,
-                        'x-request-timestamp': timestamp1,
-                    },
-                    body:JSON.stringify({encrypted:encrypted1})
-                }).then(response=>{
-                    if(!response.ok){
-                        throw new Error(`HTTP 错误！状态码：${response.status}`)
-                    }
-                    return response.json();
-                }).then(async data=>{
-                    if(data.success){
-                        const encrypted2=await nextlogin();
-                        inputvalue.username="";
-                        inputvalue.password="";
-                        inputvalue.message="";
-                        inputvalue.subtag="login";
-                        document.querySelector(".main>div:nth-child(2)>input").value="";
-                        document.querySelector(".main>div:nth-child(3)>input").value="";
-                        document.querySelector(".main>div:nth-child(4)>input").value="";
-                        window.location.href=clientUrl+"/updatefile?token="+encodeURIComponent(data.token)+"&username="+encodeURIComponent(encrypted2);
-                    }
-                }).catch(err=>{
-                    console.log(err+"1122");
-                })
-            }
+async function nextpost(publicKeyF,privateKeyE){
+    const requestData={
+        username:"",
+        password:"",
+        token:"",
+        message:"",
+        nonce:""
+    };
+    const nonce1 = generateRandom6Digits(); 
+    requestData.nonce=nonce1;
+    const timestamp1 = Math.floor(Date.now() / 1000).toString();
+    const encrypted10=await encryptflare(publicKeyF,JSON.stringify(requestData));
+    fetch(serverUrl+"/api/auth/payselect",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json",
+            'x-request-nonce': nonce1,
+            'x-request-timestamp': timestamp1,
+        },
+        body:JSON.stringify({encrypted:encrypted10})
+    }).then(response=>{
+        if(!response.ok){
+            throw new Error(`HTTP 错误！状态码：${response.status}`)
         }
-        if(inputvalue.subtag==="restart"){
-            alert("你需要修改密码吗？")
-            if(inputvalue.username&&inputvalue.password&&inputvalue.message){
-                const nonce1 = generateRandom6Digits(); // 隨機數
-                const timestamp1 = Math.floor(Date.now() / 1000).toString(); 
-                inputvalue.nonce=nonce1;
-                const encrypted=await encryptflare(publicKeyF,JSON.stringify(inputvalue));
-                fetch(serverUrl+"/api/auth/adminrestart",{
-                    method:"POST",
-                    headers:{
-                        "Content-Type":"application/json",
-                        'x-request-nonce': nonce1,
-                        'x-request-timestamp': timestamp1,
-                    },
-                    body:JSON.stringify({encrypted:encrypted})
-                }).then(response=>{
-                    if(!response.ok){
-                        throw new Error(`HTTP 错误！状态码：${response.status}`)
-                    }
-                    return response.json();
-                }).then(data=>{
-                    if(data.success){
-                        inputvalue.username="";
-                        inputvalue.password="";
-                        inputvalue.message="";
-                        inputvalue.subtag="login";
-                        document.querySelector(".main>div:nth-child(2)>input").value="";
-                        document.querySelector(".main>div:nth-child(3)>input").value="";
-                        document.querySelector(".main>div:nth-child(4)>input").value="";
-                        document.querySelector(".main>div:nth-child(1)>button:nth-child(1)").click();
-                    }
-                }).catch(err=>{
-                    console.log(err+"1122");
-                })
-            }
+        return response.json();
+    }).then(async data=>{
+        if(data.success){
+            const message="";
+            const decrypted=await decryptflare(privateKeyE,data.encrypted);
+            data.setupArr[0].paylist.forEach((item)=>{
+                if(item.payname==="paypal")message+=encodeURIComponent(item.payurl);
+                if(item.payname==="wise")message+=encodeURIComponent(item.payurl);
+                if(decrypted===message)nextsetup(data.setupArr)
+            })
         }
-    }
+    }).catch(err=>{
+        console.log(err);
+    })
 }
+
+function nextsetup(setupArr){
+    setupArr=[
+        {value:"donate",name:"捐赠",equity:["所见即所得"],price:["随缘乐捐"],paylist:[{payname:"paypal",payimg:"",payurl:""},{payname:"wise",payimg:"",payurl:""}]},
+        {value:"subscription",name:"订阅",equity:[],price:[],paylist:[]},
+        {value:"lifetime",name:"终身",equity:[],price:[],paylist:[]},
+    ];
+    if(setupArr.length<1)return alert("请设置分类付款");
+    let html1="",html2="",html3="",html4="";
+    setupArr.forEach((item,index)=>{
+        html1+=`<button>${item.name}</button>`;  
+        
+        if(index===0){
+            setupArr[index].equity.forEach((item1,index1)=>{
+                html2+=`
+                    <li>${item1}</li>                    
+                `;
+                if((index1+1)===setupArr[index].equity.length){
+                    document.querySelector(".main>.payselect>div:nth-child(1)>ul").innerHTML=html2;
+                }
+            })
+            setupArr[index].price.forEach((item1,index1)=>{
+                html3+=`
+                    <button>${item1}</button>
+                `;
+                if((index1+1)===setupArr[index].price.length){
+                    document.querySelector(".main>.payselect>div:nth-child(2)").innerHTML=html3;
+                    paystart(index);
+                }
+            })
+        }
+              
+        if((index+1)===setupArr.length){
+            document.querySelector(".main>.vipselect").innerHTML=html1; 
+            document.querySelector(".main>.vipselect>button:nth-child(2)").disabled=true;
+            document.querySelector(".main>.vipselect>button:nth-child(3)").disabled=true;          
+            document.querySelectorAll(".main>.vipselect>button").forEach((item0,index0)=>{
+                item0.onclick=function(e){
+                    e.stopPropagation();html2="";html3="";
+                    setupArr[index0].equity.forEach((item1,index1)=>{
+                        html2+=`
+                            <li>${item1}</li>                    
+                        `;
+                        if((index1+1)===setupArr[index0].equity.length){
+                            document.querySelector(".main>.payselect>div:nth-child(1)>ul").innerHTML=html2;
+                        }
+                    })
+                    setupArr[index0].price.forEach((item1,index1)=>{
+                        html3+=`
+                            <button>${item1}</button>
+                        `;
+                        if((index1+1)===setupArr[index0].price.length){
+                            document.querySelector(".main>.payselect>div:nth-child(2)").innerHTML=html3;
+                            paystart(index0);
+                        }
+                    })
+                }
+            })
+        }
+    })
+}
+
+function paystart(indx){
+    document.querySelectorAll(".main>.payselect>div:nth-child(2)>button").forEach((item)=>{
+        item.onclick=function(e){
+            e.stopPropagation();
+            document.querySelector(".butposition").style.display="flex";
+            document.querySelector(".butposition>button").onclick=function(e1){
+                e1.stopPropagation();
+                document.querySelector(".butposition").style.display="none";
+                document.querySelector(".butpay").style.display="flex";
+                html4="";
+                setupArr[indx].paylist.forEach((itm,ind)=>{
+                    html4+=`
+                        <li>
+                            <img src="${itm.payimg}">
+                            <button>直接跳转</button>
+                        </li>
+                    `;
+                    if((ind+1)===setupArr[indx].paylist.length){
+                        document.querySelector(".butpay>ul").innerHTML=html4;
+                        document.querySelectorAll(".butpay>ul>li").forEach((item11,index11)=>{
+                            item11.onclick=function(e2){
+                                e2.stopPropagation();
+                                window.location.href=setupArr[indx].paylist[index11].payurl;
+                            }
+                        })
+                        
+                    }
+                })
+            }
+        }
+    })
+}
+
 function encryptflare(pem,str){
     return new Promise(async (resolve) => {    
         try {
@@ -162,9 +161,8 @@ function encryptflare(pem,str){
                 resolve(null);
                 return;
             }
-                // 選擇對應的公鑰欄位（請對齊你的資料庫欄位名稱，此處以 public_keyE 為例）
+            // 選擇對應的公鑰欄位（請對齊你的資料庫欄位名稱，此處以 public_keyE 為例）
             const pkBuffer = pemToArrayBuffer(pem);
-
             // 【關鍵修正】必須先 import 成 CryptoKey 物件
             const publicKey = await crypto.subtle.importKey(
             "spki",

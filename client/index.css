@@ -1,56 +1,123 @@
-body { width:100%;height:100vh;}
 .main{
-    width:360px;
-    height:320px;
-    margin: 100px auto;
-    padding: 10px;
-    box-sizing: border-box;
+    margin: 20px;
+    width:100%;
     display: flex;
     justify-content: space-around;
     align-items: center;
     flex-direction: column;
 }
-.main>div{
+.main>.vipselect{
+    width:100%;
+    height:40px;
+    margin-bottom:10px;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+}
+.main>.vipselect>button{
+    width:100px;
+    height:30px;
+    border:1px solid #000;
+    border-radius: 5px;
+}
+.main>.payselect{
+    width:100%;
+    margin-bottom:10px;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-direction: column;
+}
+.main>.payselect>div:nth-child(1){
+    width:100%;
+    height:400px;
+    margin-bottom:10px;
+    overflow-y: scroll;    
+}
+.main>.payselect>div:nth-child(1)>ul{
+    width:100%;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-direction: column;
+}
+.main>.payselect>div:nth-child(1)>ul>li{
+    width:100%;
+    height:30px;
+    margin-bottom:10px;
+    text-indent: 1em;
+    line-height: 30px;
+}
+.main>.payselect>div:nth-child(2){
+    width:100%;
+    height:40px;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+}
+.main>.payselect>div:nth-child(2)>button{
+    width:200px;
+    height:30px;
+    border-radius: 5px;
+    background-color: #000;
+    color:#fff;
+}
+.butposition,.butpay{
+    width:100%;
+    height:100vh;
+    display:none;
+    justify-content:center;
+    align-items: center;
+    flex-direction: column;
+    padding: 30px;
+    box-sizing: border-box;
+    background-color: #fff;
+    position:fixed;
+    left: 0;top:0;
+    z-index:2;
+}
+.butposition>p,
+.butpay>p,
+.butposition>a{
+    width:400px;
+    height:30px;
+    text-indent: 1em;
+    line-height: 30px;
+    margin-bottom:20px;
+    word-break: break-all;
+}
+.butposition>a{
+    color:blue;
+}
+.butposition>button{
+    width:400px;
+    height:30px;
+    border:1px solid #000;
+    border-radius: 5px;
+}
+.butpay>ul{
     width:100%;
     display: flex;
     justify-content: space-around;
     align-items: center;
-    height:40px;
+    flex-wrap: wrap;
 }
-.main>div:nth-child(4){
-    display: none;
+.butpay>ul>li{
+    width:45%;
+    height:400px;
+    display:flex;
+    justify-content: space-around;
+    align-items: center;
+    flex-direction: column;
 }
-.main>div>p{
-    width:90px;
-    height:100%;
-    text-indent: 1em;
-    line-height: 40px;
-    font-weight: bold;
-}
-.main>div>input{
+.butpay>ul>li>img{
     width:260px;
-    height:100%;
-    text-indent: 1em;
-    line-height: 40px;
-    border:1px solid #f38020;
+    height:360px;
+    margin-bottom: 10px;
+}
+.butpay>ul>li>button{
+    width:200px;
+    height:30px;
+    border:1px solid #000;
     border-radius: 5px;
-}
-.main>div>button{
-    background-color:transparent;
-    color:#f38020;
-    width:160px;
-    height:40px;
-    cursor: pointer;
-    font-size:18px;
-    font-weight: bold;
-    border:0 solid transparent;
-}
-.main>div:nth-child(5)>button{
-    background-color: #f38020;
-    color:#fff;
-    width:330px;
-    height:40px;
-    cursor: pointer;
-    font-weight: bold;
-    font-size:18px;
 }
