@@ -1178,7 +1178,7 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
     }, 500)
   }
 })
-//获取ADlink,paylist,custemail,custcode,proaccount
+//获取ADlink,paylist,custemail,custcode,proaccount,types
 app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -1191,6 +1191,7 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       paylist: Record<string, unknown>[];
       memberlist: Record<string, unknown>[];
       userlist: Record<string, unknown>[];
+      types: Record<string, unknown>[];
     } = {
       adlist: [],
       custemail: [],
@@ -1198,7 +1199,8 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       proaccount:[],
       paylist: [],
       memberlist:[],
-      userlist: []
+      userlist: [],
+      types: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
       const res1 = await c.env.DB.prepare(
@@ -1222,6 +1224,9 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
     const res7 = await c.env.DB.prepare(
         'SELECT * FROM paylist WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
+    const res8 = await c.env.DB.prepare(
+        'SELECT * FROM typepays WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
     if(res1.results.length>0)newObj.adlist.push(...res1.results);
     if(res2.results.length>0)newObj.custemail.push(...res2.results);
     if(res3.results.length>0)newObj.memberlist.push(...res3.results);
@@ -1229,6 +1234,7 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
     if(res5.results.length>0)newObj.custcode.push(...res5.results);
     if(res6.results.length>0)newObj.proaccount.push(...res6.results);
     if(res7.results.length>0)newObj.paylist.push(...res7.results);
+    if(res8.results.length>0)newObj.types.push(...res8.results);
 
     return c.json({
         success: true,
@@ -1451,29 +1457,29 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
-        'SELECT * FROM items WHERE content = ?'
+        'SELECT * FROM paylist WHERE payname = ?'
     ).bind(message.split("(ASD)")[2]).first();
-    if(!res||!res.file_key){  
+    if(!res||!res.payimg){  
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
-          'INSERT INTO items (content,file_key,publicid) VALUES (?,?,?,?,?)'
+          'INSERT INTO paylist (payname,payimg,payurl,publicid) VALUES (?,?,?,?,?)'
         )
-        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
         const result = await c.env.DB.prepare(
-          'DELETE FROM items WHERE content = ?'
+          'DELETE FROM paylist WHERE payname = ?'
         )
         .bind(message.split("(ASD)")[1])
         .run()
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE items SET file_key = ? WHERE content = ?'
+          'UPDATE paylist SET payimg = ?,payurl = ? WHERE payname = ?'
         )
-        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
       }
     }
@@ -1519,6 +1525,44 @@ app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware,
         .run()
         //关联user_sign表格
         setupsignvrifig(c.env.DB,user.id,message,usernum);
+      }
+    }
+})
+//增删改付款分类描述
+app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, async (c)=>{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM typepays WHERE typename = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!res||!res.content||!res.price){
+      if(message.split("(ASD)")[0]==="add"){        
+        const result = await c.env.DB.prepare(
+          'INSERT INTO typepays (typename,content,price,publicid) VALUES (?,?,?,?)'
+        )
+        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+        .run()
+      }
+    }else{
+      if(message.split("(ASD)")[0]==="del"){
+        const result = await c.env.DB.prepare(
+          'DELETE FROM typepays WHERE typename = ?'
+        )
+        .bind(message.split("(ASD)")[1])
+        .run()        
+      }
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE typepays SET content = ?,price = ? WHERE typename = ?'
+        )
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
+        .run()
       }
     }
 })

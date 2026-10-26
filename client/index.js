@@ -61,11 +61,11 @@ async function nextpost(publicKeyF,privateKeyE){
 }
 
 function nextsetup(setupArr){
-    setupArr=[
+    /**setupArr=[
         {value:"donate",name:"捐赠",equity:["所见即所得"],price:["随缘乐捐"],paylist:[{payname:"paypal",payimg:"",payurl:""},{payname:"wise",payimg:"",payurl:""}]},
         {value:"subscription",name:"订阅",equity:[],price:[],paylist:[]},
         {value:"lifetime",name:"终身",equity:[],price:[],paylist:[]},
-    ];
+    ];*/
     if(setupArr.length<1)return alert("请设置分类付款");
     let html1="",html2="",html3="",html4="";
     setupArr.forEach((item,index)=>{

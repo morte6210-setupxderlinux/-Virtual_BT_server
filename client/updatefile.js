@@ -63,7 +63,7 @@ async function nextpost(publicKeyF,privateKeyE){
     }).catch(err=>{
         console.log(err);
     })
-    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],typepost="rest";
+    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],types=[],typepost="rest";
     async function nextimage(){
         const requestData={
             username:JSON.parse(usernum).username,
@@ -134,13 +134,14 @@ async function nextpost(publicKeyF,privateKeyE){
         }).then(data=>{console.log(data)
             if(data.success&&data.usernum===JSON.parse(usernum).username){
                 const newObj=data.newObj;
-                let html1="",html2="",html3="",html4="",html5="",html6="",html7="",html8=""; 
+                let html1="",html2="",html3="",html4="",html5="",html6="",html7="",html8="",html9=""; 
                 adlist.push(...newObj.adlist);
                 custemail.push(...newObj.custemail);
                 custcode.push(...newObj.custcode);
                 proaccount.push(...newObj.proaccount);
                 paylist.push(...newObj.paylist);
                 memberlist.push(...newObj.memberlist);
+                types.push(...newObj.types);
                 if(newObj.userlist.length<1){
                     html7=`
                         <option></option>
@@ -304,6 +305,7 @@ async function nextpost(publicKeyF,privateKeyE){
                         <li>
                             <div><p>归属：</p><select disabled></select></div>
                             <div><p>链接：</p><input type="text" value="" disabled></div>
+                            <div><p>跳转：</p><input type="text" value="" disabled></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
@@ -317,6 +319,7 @@ async function nextpost(publicKeyF,privateKeyE){
                             <li>
                                 <div><p>归属：</p><select disabled></select></div>
                                 <div><p>链接：</p><input type="text" value="${item.payimg}" disabled></div>
+                                <div><p>跳转：</p><input type="text" value="${item.payurl}" disabled></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -370,6 +373,40 @@ async function nextpost(publicKeyF,privateKeyE){
                         }
                     })
                 }
+                if(newObj.types.length<1){
+                    html9=`
+                        <li>
+                            <div><p>类别：</p><select disabled></select></div>
+                            <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
+                            <div><p>价格：</p><textarea placeholder="每段价格之间用;号分开" disabled></textarea></div>
+                            <div><button>修改</button><button>保存</button><button>删除</button></div>
+                        </li>
+                    `;
+                    document.querySelector(".main>.buttab3>div:nth-child(7)>ul").innerHTML=html9; 
+                    document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item2)=>{
+                        item2.querySelector("div:nth-child(1)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+                    })
+                }else{
+                    newObj.types.forEach((item,index)=>{
+                        html9+=`
+                            <li>
+                                <div><p>类别：</p><select disabled></select></div>
+                                <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled>${item.content}</textarea></div>
+                                <div><p>价格：</p><textarea placeholder="每段价格之间用;号分开" disabled>${item.price}</textarea></div>
+                                <div><button>修改</button><button>保存</button><button>删除</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.types.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(7)>ul").innerHTML=html9;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item2,index2)=>{
+                                item2.querySelector("div:nth-child(1)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
+                                    if(newObj.types[index2].typename===item1.value)item1.selected=true;
+                                })
+                            })
+                        }
+                    })
+                }
                 nextsetdata(html7);
             }
         }).catch(err=>{
@@ -377,7 +414,7 @@ async function nextpost(publicKeyF,privateKeyE){
         })
     }
     function nextsetdata(html7){ 
-        nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();nextinputvalue();
+        nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();nexttypes();nextinputvalue();
         document.querySelector(".main>.buttab3>div:nth-child(1)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
             if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(6)>input").value)return "有空白的表单未完成"
@@ -419,10 +456,11 @@ async function nextpost(publicKeyF,privateKeyE){
     let custemailobj={typename:"",enumber:""};
     let custcodeobj={codename:"",codeimg:""};
     let proaccountObj={proname:"",proimg:"",prourl:""};
-    let payobj={content:"",file_key:""};
+    let payobj={payname:"",payimg:"",payurl:""};
     let memberobj={usernum:"",type:"",expires:""};
+    let typesobj={typename:"",content:"",price:""};
     function nextinputvalue(){
-        let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0;
+        let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0;
         const reg=/select|update|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|union|and|or|--|\'|\"/i;
         document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
             item.querySelectorAll("div:nth-child(2)>select>option").onclick=function(e){
@@ -561,22 +599,31 @@ async function nextpost(publicKeyF,privateKeyE){
             item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
                 if(index!==pay_index){
                     pay_index=index;
-                    payobj.content="";payobj.file_key="";
+                    payobj.payname="";payobj.payimg="";payobj.payurl="";
                 }
                 if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                payobj.content=item.querySelectorAll("div:nth-child(1)>select").value;
+                payobj.payname=item.querySelectorAll("div:nth-child(1)>select").value;
                 items.some((itm)=>{
-                    if(itm.content===payobj.content)item.querySelector("div:nth-child(2)>input").value=itm.file_key
+                    if(itm.content===payobj.payname)item.querySelector("div:nth-child(2)>input").value=itm.file_key
                 })
             }
             item.querySelector("div:nth-child(2)>input").oninput=function(e){
                 e.stopPropagation();let This=this;
                 if(index!==pay_index){
                     pay_index=index;
-                    payobj.content="";payobj.file_key="";
+                    payobj.payname="";payobj.payimg="";payobj.payurl="";
                 }
                 if(reg.test(This.value))return alert("文本不安全");
-                payobj.file_key=this.value;
+                payobj.payimg=this.value;
+            }
+            item.querySelector("div:nth-child(3)>input").oninput=function(e){
+                e.stopPropagation();let This=this;
+                if(index!==pay_index){
+                    pay_index=index;
+                    payobj.payname="";payobj.payimg="";payobj.payurl="";
+                }
+                if(reg.test(This.value))return alert("文本不安全");
+                payobj.payurl=this.value;
             }
         })
         document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item,index)=>{
@@ -604,6 +651,34 @@ async function nextpost(publicKeyF,privateKeyE){
                 }
                 if(reg.test(This.value))return alert("文本不安全");
                 memberobj.expires=this.value;
+            }
+        })
+        document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item,index)=>{
+            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
+                if(index!==types_index){
+                    types_index=index;
+                    typesobj.typename="";typesobj.content="";typesobj.price="";
+                }
+                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
+                typesobj.typename=item.querySelectorAll("div:nth-child(1)>select").value;
+            }
+            item.querySelectorAll("div:nth-child(2)>textarea").oninput=function(e){
+                e.stopPropagation();let This=this;
+                if(index!==types_index){
+                    types_index=index;
+                    typesobj.typename="";typesobj.content="";typesobj.price="";
+                }
+                if(reg.test(This.value))return alert("文本不安全");
+                typesobj.content=this.value;
+            }
+            item.querySelector("div:nth-child(3)>textarea").oninput=function(e){
+                e.stopPropagation();let This=this;
+                if(index!==types_index){
+                    types_index=index;
+                    typesobj.typename="";typesobj.content="";typesobj.price="";
+                }
+                if(reg.test(This.value))return alert("文本不安全");
+                typesobj.price=this.value;
             }
         })
     }
@@ -807,13 +882,13 @@ async function nextpost(publicKeyF,privateKeyE){
                 item.querySelector("div:nth-child(2)>input").disabled=false;
                 item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!payobj.content||!payobj.file_key)return alert("信息未填全")
+                    if(!payobj.payname||!payobj.payimg||!payobj.payurl)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_pay";
                     const requestData={
                         username:JSON.parse(usernum).username,
                         password:"",
                         token:"",
-                        message:typepost+"(ASD)"+payobj.content+"(ASD)"+payobj.file_key,
+                        message:typepost+"(ASD)"+payobj.payname+"(ASD)"+payobj.payimg+"(ASD)"+payobj.payurl,
                         nonce:""
                     };
                     const nonce11 = generateRandom6Digits(); 
@@ -894,6 +969,54 @@ async function nextpost(publicKeyF,privateKeyE){
             }
         })
     };
+    function nexttypes(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(4)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(1)>select").disabled=false;
+                item.querySelector("div:nth-child(2)>textarea").disabled=false;
+                item.querySelector("div:nth-child(3)>textarea").disabled=false;
+                item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!typesobj.typename||!typesobj.content||!typesobj.price)return alert("信息未填全")
+                    const pathurl="/api/protected/adddelrest_types";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:typepost+"(ASD)"+typesobj.typename+"(ASD)"+typesobj.content+"(ASD)"+typesobj.price,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                }
+                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&types[0].typename){
+                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(7)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)"));
+                        typepost="rest";
+                        return alert("有空白表单未处理");
+                    }
+                    const pathurl="/api/protected/adddelrest_types";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(7)>ul"));                        
+                }
+            }
+        })
+    }
     function postserver(pathurl,nonce0,timestamp0,encrypted0,item0,nodent){
         fetch(serverUrl+pathurl,{
             method:"POST",
