@@ -29,7 +29,7 @@ export const securityMiddleware = async (c: Context, next: Next) => {
           await db.prepare(
             'UPDATE ip_rate_limits SET blocked_until = ? WHERE ip = ?'
           ).bind(blockUntilTime, clientIp).run();
-          
+          console.log("87353508250920")
           return c.json({ success: false, error: 'Rate limit exceeded. Temporarily blocked.' }, 429);
         } else {
           // 次數 +1
@@ -89,7 +89,7 @@ export const securityMiddleware = async (c: Context, next: Next) => {
     await db.prepare('DELETE FROM request_nonces WHERE created_at < ?').bind(oneHourAgo).run();
 
     // 通過所有檢查，放行
-    await next();
+    return await next();
 
   } catch (err: any) {
     return c.json({ success: false, error: 'Security middleware internal error: ' + err.message }, 500);

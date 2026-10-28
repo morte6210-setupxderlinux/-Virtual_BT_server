@@ -3,6 +3,8 @@ import { jwt, sign } from 'hono/jwt'
 import {cors} from "hono/cors"
 import { securityMiddleware } from './securityMiddleware'
 import { authMiddleware } from './authMiddleware'; 
+import {deviceSecurityMiddleware} from './deviceSecurityMiddleware';
+import {deviceauthMiddleware} from './deviceauthMiddleware'
 import {adminconfig} from './config'
 type Bindings = {
   DB: D1Database
@@ -17,6 +19,7 @@ type Variables = {
   password: string
   token: string
   message: string
+  UUID: string
   jwtPayload: {
     id: number
     username: string
@@ -29,7 +32,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>()
 app.use("/*", cors({
   origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
   allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowHeaders: ["Content-Type", "Authorization","x-request-nonce","x-request-timestamp","x-signature"],
+  allowHeaders: ["Content-Type", "Authorization","x-request-nonce","x-request-timestamp","x-signature","x-device-uuid","x-signature"],
   credentials: true,
 }))
 
@@ -122,6 +125,16 @@ async function initializeDatabase(db: D1Database) {
           blocked_until INTEGER DEFAULT 0
       );
     `).run();
+    //设备端频率限制
+    await db.prepare(`
+        CREATE TABLE IF NOT EXISTS device_rate_limits (
+          device_id TEXT PRIMARY KEY,
+          request_count INTEGER,
+          window_start INTEGER,
+          blocked_until INTEGER
+        );
+    `).run();
+
 
     // 7. ADlink表格 (注意：expritime 後面補上了逗號)
     await db.prepare(`
@@ -134,6 +147,7 @@ async function initializeDatabase(db: D1Database) {
           postname TEXT NOT NULL,
           linkUrl TEXT NOT NULL,
           expritime DATETIME,
+          publicid TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -179,7 +193,7 @@ async function initializeDatabase(db: D1Database) {
       );
     `).run();
 
-    // 9. member_start表格 (修正了你原本拼寫錯誤的 member_start)
+    // 9. member_start表格
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS member_start (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -200,7 +214,7 @@ async function initializeDatabase(db: D1Database) {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           content TEXT NOT NULL,
           file_key TEXT NOT NULL,
-          publicid TEXT NOT NULL,,
+          publicid TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -223,6 +237,7 @@ async function initializeDatabase(db: D1Database) {
     console.error('Failed to initialize database:', err.message);
   }
 }
+
 // 輔助函式：將 ArrayBuffer 轉換為標準 PEM 格式字串
 function formatPem(buffer:ArrayBuffer, label:string) {
     const bytes=new Uint8Array(buffer);
@@ -487,9 +502,10 @@ function generateRandom6Digits(): string {
   return String(randomNum).padStart(6, '0');
 }
 //签章会员特征值
-async function addsignkey(db: D1Database,userId: Number,message: string,usernum: string){
+async function addsignkey(db: D1Database,userId: Number,message: string){
+  try{  
     const mechinaId: any = await db.prepare(
-        'SELECT * FROM users WHERE user_id = ?'
+        'SELECT * FROM users WHERE id = ?'
     ).bind(userId).first();
     if(!mechinaId||!mechinaId.UUID)return null
     // 1. 從資料庫讀出私鑰 PEM 字串
@@ -503,9 +519,9 @@ async function addsignkey(db: D1Database,userId: Number,message: string,usernum:
     if(!dbKeyRecord1||!dbKeyRecord1.private_keyF)return null
     const privateKeyPem = dbKeyRecord.private_keyD as string;
     const privateKeyPem1 = dbKeyRecord1.private_keyF as string;
-    const expires=message.split("(ASD)")[2];
-    const subtype=message.split("(ASD)")[1];
-    const signatureBase64=await verifysign(privateKeyPem,usernum+mechinaId.UUID+expires+subtype) 
+    const expires=message.split("(ASD)")[3];
+    const subtype=message.split("(ASD)")[2];
+    const signatureBase64=await verifysign(privateKeyPem,message.split("(ASD)")[1]+mechinaId.UUID+expires+subtype) 
     const adminlist: any = await db.prepare(
         'SELECT * FROM admin WHERE publicid = ?'
     ).bind('758805').first();
@@ -516,20 +532,25 @@ async function addsignkey(db: D1Database,userId: Number,message: string,usernum:
     const sum=Math.floor(Math.random()*(signatureBase64.length-1));
     const sign=signatureBase64.substring(0,sum)+password_base+signatureBase64.substring(sum,signatureBase64.length);
     return {sign:sign,UUID:mechinaId.UUID}
+  }catch(err:any){console.log(err)
+    return null
+  }
 }
-async function setupsignvrifig(db: D1Database,userId: Number,message: string,usernum: string){
+async function setupsignvrifig(db: D1Database,userId: Number,message: string){
+  try{
     if(message.split("(ASD)")[0]==="add"){
-      const signObj=await addsignkey(db,userId,message,usernum) as any;
+      const signObj=await addsignkey(db,userId,message) as any;
       await db.prepare(
         'INSERT INTO user_sign (user_id,usernum,UUID,expires,signature,type,publicid) VALUES (?,?,?,?,?,?,?)'
       )
-      .bind(userId,usernum,signObj.UUID,message.split("(ASD)")[2],signObj.sign,message.split("(ASD)")[1],"758805")
+      .bind(userId,message.split("(ASD)")[1],signObj.UUID,message.split("(ASD)")[3],signObj.sign,message.split("(ASD)")[2],"758805")
       .run()
+      return true
     }
     if(message.split("(ASD)")[0]==="del"){
         const query = 'SELECT * FROM user_sign WHERE usernum LIKE ? OR type LIKE ?'
-        const searchTerm1 = `%${usernum}%`
-        const searchTerm2 = `%${message.split("(ASD)")[1]}%`
+        const searchTerm1 = `%${message.split("(ASD)")[1]}%`
+        const searchTerm2 = `%${message.split("(ASD)")[2]}%`
         const res: any = await db.prepare(query)
         .bind(searchTerm1, searchTerm2).first()
         if(res&&res.id){
@@ -539,22 +560,27 @@ async function setupsignvrifig(db: D1Database,userId: Number,message: string,use
           .bind(res.id)
           .run()
         }
+        return true
     } 
     if(message.split("(ASD)")[0]==="rest"){
-        const signObj=await addsignkey(db,userId,message,usernum) as any;
+        const signObj=await addsignkey(db,userId,message) as any;
         const query = 'SELECT * FROM user_sign WHERE usernum LIKE ? OR type LIKE ?'
-        const searchTerm1 = `%${usernum}%`
-        const searchTerm2 = `%${message.split("(ASD)")[1]}%`
+        const searchTerm1 = `%${message.split("(ASD)")[1]}%`
+        const searchTerm2 = `%${message.split("(ASD)")[2]}%`
         const res: any = await db.prepare(query)
         .bind(searchTerm1, searchTerm2).first()
         if(res&&res.id){
           await db.prepare(
             'UPDATE user_sign SET type = ?,expires = ?,signature = ? WHERE id = ?'
           )
-          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],signObj.sign,res.id)
+          .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],signObj.sign,res.id)
           .run()
         } 
-    } 
+        return true
+    }
+  }catch(err:any){
+    return false
+  } 
 }
 
 // ----------------------------------------------------
@@ -563,7 +589,7 @@ async function setupsignvrifig(db: D1Database,userId: Number,message: string,use
 //使用 c.get() 取出中间件掛載的資料
 //如：const currentUser = c.get('user');
 // 用戶註冊
-app.post('/api/auth/register', securityMiddleware, authMiddleware, async (c) => {
+app.post('/api/auth/userregister', deviceSecurityMiddleware, deviceauthMiddleware, async (c) => {
   /**
   // === 驗證人類還是機器人 (Turnstile 伺服器端驗證) ===
   const turnstileSecret = c.env.TURNSTILE_SECRET_KEY
@@ -594,29 +620,37 @@ app.post('/api/auth/register', securityMiddleware, authMiddleware, async (c) => 
   try {
     const usernum = c.get('usernum')
     const password=c.get("password")
-    const message=c.get("message")
-    if(!usernum||!password||!message)return c.json({ error: 'Invalid username or password' },401)
+    const UUID=c.get("UUID")
+    if(!usernum||!password||!UUID)return c.json({ error: 'Invalid username or password' },401)
     const passwordHash = await hashPassword(password)
     const username: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE username = ?'
     ).bind(usernum).first();
-    if (username||username.username) {
-        return c.json({ error: 'username is error' }, 400)
+    if (!username||!username.username){ 
+        const deviceId: any = await c.env.DB.prepare(
+            'SELECT * FROM users WHERE UUID = ?'
+        ).bind(UUID).first();
+        if(!deviceId||deviceId.UUID!==UUID){
+            const adminname: any = await c.env.DB.prepare(
+                'SELECT * FROM admin WHERE adminname = ?'
+            ).bind(usernum).first();
+            if (!adminname||!adminname.adminname) {
+                const result = await c.env.DB.prepare(
+                  'INSERT INTO users (username, password_hash,UUID,publicid) VALUES (?,?,?,?)'
+                )
+                .bind(usernum, passwordHash,UUID,"758805")
+                .run()
+                return c.json({ success: true, userId: result.meta.last_row_id }, 201)
+            }else{
+              return c.json({ error: 'username is error' }, 400)
+            }
+        }else{
+          return c.json({ error: 'UUID is error' }, 400)
+        }
+    }else{
+      return c.json({ error: 'username is error' }, 400)
     }
-    const adminname: any = await c.env.DB.prepare(
-        'SELECT * FROM admin WHERE adminname = ?'
-    ).bind(usernum).first();
-    if (adminname||adminname.adminname) {
-        return c.json({ error: 'username is error' }, 400)
-    }
-    const result = await c.env.DB.prepare(
-      'INSERT INTO users (username, password_hash,UUID) VALUES (?,?,?)'
-    )
-    .bind(usernum, passwordHash,message)
-    .run()
-
-    return c.json({ success: true, userId: result.meta.last_row_id }, 201)
-  } catch (err: any) {
+  } catch (err: any) {console.log(err)
     return c.json({ error: 'Username already exists or database error' }, 400)
   }
 })
@@ -654,11 +688,11 @@ app.post('/api/auth/adminrestart', securityMiddleware, authMiddleware, async (c)
       message: 'Item updated successfully',
       meta: result.meta 
     })
-  } catch (err: any) {
+  } catch (err: any) {console.log(err)
     return c.json({ error: 'adminname already exists or database error' }, 400)
   }
 })
-//生成加密值
+//管理端生成加密值
 app.post('/api/public/clientencry', securityMiddleware, async (c) => {
   try{
     const body = await c.req.json();
@@ -717,8 +751,83 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
     }, 500)
   }
 })
-// 获取付款分类描述
-app.post('/api/auth/payselect', securityMiddleware, async (c) => {
+// 用户获取付款分类描述
+app.post('/api/auth/device/payselect', securityMiddleware,deviceauthMiddleware, async (c) => {
+  try {
+    const body = await c.req.json();
+    const nonce = c.req.header('x-request-nonce');
+    const query = 'SELECT * FROM system_keys WHERE key_name = ?'
+    const res = await c.env.DB.prepare(query)
+      .bind("default")
+      .all() 
+    if(res.results.length>0&&res.results[0].public_keyE&&res.results[0].private_keyF){
+        const privateKeyPem = res.results[0].private_keyF as string;
+        const decrypted=await decryptflare(privateKeyPem,body.encrypted) as string;
+        if(nonce!==JSON.parse(decrypted).nonce)return c.json({success: false}, 400);
+        
+        const query1 = 'SELECT * FROM paylist WHERE publicid = ?'
+        const res1:any = await c.env.DB.prepare(query1).bind("758805").all();
+        const query2 = 'SELECT * FROM typepays WHERE publicid = ?'
+        const res2:any = await c.env.DB.prepare(query2).bind("758805").all();  
+        if(!res1||!res1.results[0]||!res2||!res2.results[0])return c.json({success: false,}, 400);
+        let message="";
+        [...res1.results].forEach((item)=>{
+          if(item.payname==="paypal")message+=encodeURIComponent(item.payurl);
+          if(item.payname==="wise")message+=encodeURIComponent(item.payurl);
+        })
+        const setupArr=[] as any;
+        [...res2.results].forEach(async (item1,index1) => {
+          if(item1.typename==="donate"){
+            setupArr.push({
+              value:"donate",
+              name:"捐赠",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })          
+          }
+          if(item1.typename==="subscription"){
+            setupArr.push({
+              value:"subscription",
+              name:"订阅",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })
+          }
+          if(item1.typename==="lifetime"){
+            setupArr.push({
+              value:"lifetime",
+              name:"终身",
+              equity:item1.content.split(";"),
+              price:item1.price.split(";"),
+              paylist:[...res1.results]
+            })
+          }
+          if((index1+1)===[...res2.results].length){
+            const publicKeyPem = res.results[0].public_keyE as string;
+            const encrypted=await encryptflare(publicKeyPem,message);
+            return c.json({
+                success: true, 
+                encrypted:encrypted,
+                setupArr:setupArr
+            })
+          }
+        });
+    }
+
+    return c.json({success: false,}, 400)
+    
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+// 管理端获取付款分类描述
+app.post('/api/auth/payselect', securityMiddleware,authMiddleware, async (c) => {
   try {
     const body = await c.req.json();
     const nonce = c.req.header('x-request-nonce');
@@ -793,23 +902,23 @@ app.post('/api/auth/payselect', securityMiddleware, async (c) => {
   }
 })
 // 用戶登入 (核發 JWT)
-app.post('/api/auth/login', securityMiddleware, authMiddleware, async (c) => {
+app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, async (c) => {
   try{  
     const usernum = c.get('usernum')
     const password=c.get("password")
-    if(!usernum||!password)return c.json({ error: 'Invalid username or password' },401)
-    const passwordHash = await hashPassword(password);console.log(passwordHash)
+    const UUID = c.get('UUID')
+    if(!usernum||!password||!UUID)return c.json({ error: 'Invalid username or password' },401)
+    const passwordHash = await hashPassword(password);
     // 1. 驗證用戶帳號與密碼
     const user: any = await c.env.DB.prepare(
-      'SELECT id, username FROM users WHERE username = ? AND password_hash = ?'
+      'SELECT id, username FROM users WHERE username = ? AND password_hash = ? AND UUID = ?'
     )
-      .bind(usernum, passwordHash)
+      .bind(usernum, passwordHash,UUID)
       .first()
     
     if (!user) {
       return c.json({ error: 'Invalid username or password' }, 401)
     }
-    
     // 2. 簽署生成 JWT Token (設定 24 小時後過期)
     const payload = {
       id: user.id,
@@ -884,6 +993,33 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     }, 500)
   }
 })
+// 透過 /files/:key 讀取 R2 中的檔案
+app.get('/files/*', async (c) => {
+  try {
+    // 取得網址中 /files/ 後面的完整檔案路徑（例如 user-1/1793085237785.jpeg）
+    const fileKey = c.req.path.replace('/files/', '');
+
+    // 從 R2 取得該物件
+    const object = await c.env.BUCKET.get(fileKey);
+
+    if (!object) {
+      return c.json({ success: false, error: '找不到該檔案' }, 404);
+    }
+
+    // 取得檔案的 Content-Type（若有儲存 metadata 的話）
+    const headers = new Headers();
+    object.writeHttpMetadata(headers);
+    headers.set('etag', object.httpEtag);
+
+    // 回傳檔案串流給前端
+    return c.body(object.body, 200, {
+      'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+    });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
 // ----------------------------------------------------
 // 2. 註冊 JWT 鑑權中間件 (保護所有以 /api/protected/* 開頭的路由)
 // ----------------------------------------------------
@@ -982,13 +1118,18 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
   }  
 })*/
 
-//产生与获取解禁码
-app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c)=>{
+//用户产生与获取解禁码
+app.post("/api/protected/device/opensign", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
   try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
+    const UUID = c.get('UUID')
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-      const dbKeyRecord: any = await c.env.DB.prepare(
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE UUID = ?'
+    ).bind(UUID).first();
+    if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
+    const dbKeyRecord: any = await c.env.DB.prepare(
         'SELECT * FROM user_keys WHERE user_id = ?'
     ).bind(user.id).first();
     if(!dbKeyRecord||!dbKeyRecord.private_keyD)return c.json({ 
@@ -1026,12 +1167,17 @@ app.post("/api/protected/opensign", securityMiddleware, authMiddleware, async (c
     }, 500)
   } 
 })
-//产生并返回用户验章密钥
-app.post("/api/protected/useraddkey", securityMiddleware, authMiddleware, async (c)=>{
+//用户产生并返回用户验章密钥
+app.post("/api/protected/device/useraddkey", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
+    const UUID = c.get('UUID')
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE UUID = ?'
+    ).bind(UUID).first();
+    if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
     const query = 'SELECT * FROM user_keys WHERE user_id = ?'
     const res = await c.env.DB.prepare(query)
       .bind(user.id)
@@ -1062,7 +1208,7 @@ app.post("/api/protected/useraddkey", securityMiddleware, authMiddleware, async 
       )
       .bind(user.id,publicKeyPemD,privateKeyPemD)
       .run()
-      return c.json({success:true,usernum:usernum,publicKeyD:privateKeyPemD})
+      return c.json({success:true,usernum:usernum,publicKeyD:publicKeyPemD})
 
     }else{
       return c.json({ success: false, data: "金钥已经存在" })
@@ -1074,15 +1220,20 @@ app.post("/api/protected/useraddkey", securityMiddleware, authMiddleware, async 
     }, 500)
   }  
 })
-//查找签章的特征值
-app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c)=>{
+//用户查找签章的特征值
+app.post("/api/protected/device/findsign", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
   try{
-    const user = c.get('jwtPayload')
-    const usernum = c.get('usernum')
+    const user = c.get('jwtPayload');
+    const usernum = c.get('usernum');
+    const UUID = c.get('UUID');
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE UUID = ?'
+    ).bind(UUID).first();
+    if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
     const signobj: any = await c.env.DB.prepare(
-        'SELECT * FROM user_sign WHERE user_id = ?'
-    ).bind(user.id).first();
+        'SELECT * FROM user_sign WHERE usernum = ?'
+    ).bind(usernum).first();
     if(!signobj||!signobj.usernum||!signobj.UUID||!signobj.expires||!signobj.type||!signobj.signature)return c.json({ 
       success: false, 
     }, 400) 
@@ -1107,7 +1258,6 @@ app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c
     const encrypted=await encryptflare(publicKeyPem,sum1.toString())
     return c.json({
       success: true,
-      UUID:signobj.UUID,
       expires:signobj.expires,
       subtag:signobj.type,
       sign:signobj.signature,
@@ -1115,60 +1265,69 @@ app.post("/api/protected/findsign", securityMiddleware, authMiddleware, async (c
       fnsum:encrypted,
       signbase64:signbase64
     })
-  } catch (err: any) {
-    // 4. 捕獲並返回異常錯誤
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤404
     return c.json({ 
       success: false, 
       error: err.message || 'Internal Server Error' 
     }, 500)
   }
 })
-// 文件上傳 API
-app.post('/api/protected/upload', securityMiddleware, async (c) => {
+//用户获取ADlink,paylist,custemail,custcode,proaccount,types
+app.post("/api/protected/device/findlink", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
-    const sysKeys: any = await c.env.DB.prepare(
-        'SELECT * FROM system_keys WHERE key_name = ?'
-    ).bind('default').first();
-    if (!sysKeys||!sysKeys.private_keyF) {
-        return c.json({ error: 'key not found' }, 400)
-    }
-    const encrypted=c.req.query("encrypted") as string;
-    const decrypted=await decryptflare(sysKeys.private_keyF,decodeURIComponent(encrypted)) as string;
-    const user_id=JSON.parse(decrypted).user_id;
-    const message=JSON.parse(decrypted).message;
-    const adminobj: any = await c.env.DB.prepare(
-      'SELECT * FROM admin WHERE adminname = ?'
-    )
-    .bind(user.username).first()
-    if(!user_id||parseInt(user_id)!==user.id||!adminobj)return c.json({ error: 'Invalid adminname' },401)
-    
-    const body = await c.req.parseBody()
-    const file = body['file'] as File
-
-    if (!file) {
-      return c.json({ error: 'No file uploaded' }, 400)
-    }
-
-    const fileExt = file.name.split('.').pop()
-    const fileKey = `user-${user.id}/${Date.now()}.${fileExt}`
-
-    // 上傳至 R2
-    await c.env.BUCKET.put(fileKey, await file.arrayBuffer(), {
-      httpMetadata: { contentType: file.type }
-    })
-
-    // 寫入 D1
-    await c.env.DB.prepare(
-      'INSERT INTO items (content, file_key) VALUES (?,?)'
-    )
-      .bind( message, fileKey,user)
-      .run()
+    const usernum = c.get('usernum')
+    const UUID = c.get('UUID')
+    const newObj: {
+      adlist: Record<string, unknown>[];
+      custemail: Record<string, unknown>[];
+      custcode: Record<string, unknown>[];
+      proaccount: Record<string, unknown>[];
+      paylist: Record<string, unknown>[];
+      types: Record<string, unknown>[];
+    } = {
+      adlist: [],
+      custemail: [],
+      custcode: [],
+      proaccount:[],
+      paylist: [],
+      types: []
+    };
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE UUID = ?'
+    ).bind(UUID).first();
+    if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
+      const res1 = await c.env.DB.prepare(
+        'SELECT * FROM ADlink WHERE usernum = ? ORDER BY created_at DESC'
+    ).bind(usernum).all();    
+    const res2 = await c.env.DB.prepare(
+        'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res5 = await c.env.DB.prepare(
+        'SELECT * FROM custcode WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res6 = await c.env.DB.prepare(
+        'SELECT * FROM proaccount WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res7 = await c.env.DB.prepare(
+        'SELECT * FROM paylist WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    const res8 = await c.env.DB.prepare(
+        'SELECT * FROM typepays WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();
+    if(res1.results.length>0)newObj.adlist.push(...res1.results);
+    if(res2.results.length>0)newObj.custemail.push(...res2.results);
+    if(res5.results.length>0)newObj.custcode.push(...res5.results);
+    if(res6.results.length>0)newObj.proaccount.push(...res6.results);
+    if(res7.results.length>0)newObj.paylist.push(...res7.results);
+    if(res8.results.length>0)newObj.types.push(...res8.results);
 
     return c.json({
-      success: true,
-      fileKey,
-      fileUrl: `/files/${fileKey}`
+        success: true,
+        usernum: user.username,
+        newObj:newObj
     })
   } catch (err: any) {
     // 4. 捕獲並返回異常錯誤
@@ -1178,7 +1337,54 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
     }, 500)
   }
 })
-//获取ADlink,paylist,custemail,custcode,proaccount,types
+//用户获取图片、文件
+app.post("/api/protected/device/findimage", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
+  try{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    const UUID = c.get('UUID')
+    const newObj: {
+      items: Record<string, unknown>[];
+    } = {
+      items: []
+    };
+    if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE UUID = ?'
+    ).bind(UUID).first();
+    if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)    
+      let results=[];
+      if (message) {
+        // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
+        const query = 'SELECT * FROM items WHERE content LIKE ? ORDER BY created_at DESC'
+        const searchTerm2 = `%${message}%`
+        const res = await c.env.DB.prepare(query).bind(searchTerm2).all()
+        results = res.results as any;
+      } else {
+          // 3. 如果沒有提供關鍵字，則返回最近的全部數據（或限制筆數）
+        const res = await c.env.DB.prepare(
+          'SELECT * FROM items ORDER BY created_at DESC LIMIT 50'
+        ).all()
+        results = res.results as any;
+      }
+    
+    if(results.length>0)newObj.items.push(...results);
+
+    return c.json({
+        success: true,
+        usernum: user.username,
+        newObj:newObj
+    })
+  } catch (err: any) {
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+//管理端获取ADlink,paylist,custemail,custcode,proaccount,types
 app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -1203,9 +1409,9 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       types: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-      const res1 = await c.env.DB.prepare(
-        'SELECT * FROM ADlink WHERE usernum = ? ORDER BY created_at DESC'
-    ).bind(usernum).all();    
+    const res1 = await c.env.DB.prepare(
+        'SELECT * FROM ADlink WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all();    
     const res2 = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
@@ -1241,7 +1447,7 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
         usernum: user.username,
         newObj:newObj
     })
-  } catch (err: any) {
+   } catch (err: any) {console.log(err)
     // 4. 捕獲並返回異常錯誤
     return c.json({ 
       success: false, 
@@ -1249,7 +1455,7 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
     }, 500)
   }
 })
-//获取图片、文件
+//管理端获取图片、文件
 app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (c)=>{
   try{
     const user = c.get('jwtPayload')
@@ -1267,9 +1473,7 @@ app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (
         // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
         const query = 'SELECT * FROM items WHERE content LIKE ? ORDER BY created_at DESC'
         const searchTerm2 = `%${message}%`
-        const res = await c.env.DB.prepare(query)
-          .bind(searchTerm2)
-          .all()
+        const res = await c.env.DB.prepare(query).bind(searchTerm2).all()
         results = res.results as any;
       } else {
           // 3. 如果沒有提供關鍵字，則返回最近的全部數據（或限制筆數）
@@ -1294,46 +1498,119 @@ app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (
     }, 500)
   }
 })
-//增删改adlink
-app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware, async (c)=>{
+// 管理端文件上傳 API
+app.post('/api/protected/upload', securityMiddleware, async (c) => {
+  try{
     const user = c.get('jwtPayload')
-    const usernum = c.get('usernum')
-    const message=c.get("message")
+    const sysKeys: any = await c.env.DB.prepare(
+        'SELECT * FROM system_keys WHERE key_name = ?'
+    ).bind('default').first();
+    if (!sysKeys||!sysKeys.private_keyF) {
+        return c.json({ error: 'key not found' }, 400)
+    }
+    const encrypted=c.req.query("encrypted") as string;
+    const decrypted=await decryptflare(sysKeys.private_keyF,decodeURIComponent(encrypted)) as string;
+    const user_id=JSON.parse(decrypted).user_id;
+    const message=JSON.parse(decrypted).message;
     const adminobj: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
     .bind(user.username).first()
-    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
-    const res = await c.env.DB.prepare(
-        'SELECT * FROM ADlink WHERE urlId = ?'
-    ).bind(message.split("(ASD)")[1]).first();
-    if(!res||!res.urlId){  
-      if(message.split("(ASD)")[0]==="add"){
-        const result = await c.env.DB.prepare(
-          'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime) VALUES (?,?,?,?,?,?,?)'
-        )
-        .bind(usernum,message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6])
-        .run()
-      }
-    }else{
-      if(message.split("(ASD)")[0]==="del"){
-        const result = await c.env.DB.prepare(
-          'DELETE FROM ADlink WHERE urlId = ?'
-        )
-        .bind(message.split("(ASD)")[1])
-        .run()
-      }
-      if(message.split("(ASD)")[0]==="rest"){
-        const result = await c.env.DB.prepare(
-          'UPDATE ADlink SET title = ?,xuhao = ?,postname = ?,linkUrl = ?,expritime = ? WHERE urlId = ?'
-        )
-        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[1])
-        .run()
-      }
+    if(!user_id||parseInt(user_id)!==user.id||!adminobj)return c.json({ error: 'Invalid adminname' },401)
+    
+    const body = await c.req.parseBody()
+    const file = body['file'] as File
+
+    if (!file) {
+      return c.json({ error: 'No file uploaded' }, 400)
     }
+
+    const fileExt = file.name.split('.').pop()
+    const fileKey = `user-${user.id}/${Date.now()}.${fileExt}`
+    console.log(fileKey);
+    // 上傳至 R2
+    await c.env.BUCKET.put(fileKey, await file.arrayBuffer(), {
+      httpMetadata: { contentType: file.type }
+    })
+
+    // 寫入 D1
+    await c.env.DB.prepare(
+      'INSERT INTO items (content, file_key,publicid) VALUES (?,?,?)'
+    )
+      .bind( message, fileKey,"758805")
+      .run()
+
+    return c.json({
+      success: true,
+      fileKey,
+      fileUrl: `/files/${fileKey}`
+    })
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改email
+//管理端增删改adlink
+app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware, async (c)=>{
+    try{
+      const user = c.get('jwtPayload')
+      const usernum = c.get('usernum')
+      const message=c.get("message")
+      const adminobj: any = await c.env.DB.prepare(
+        'SELECT * FROM admin WHERE adminname = ?'
+      )
+      .bind(user.username).first()
+      if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+      const res = await c.env.DB.prepare(
+          'SELECT * FROM ADlink WHERE urlId = ?'
+      ).bind(message.split("(ASD)")[1]).first();
+      if(!res||!res.urlId){  
+        if(message.split("(ASD)")[0]==="add"){
+          const result = await c.env.DB.prepare(
+            'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime,publicid) VALUES (?,?,?,?,?,?,?,?)'
+          )
+          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[7],"758805")
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
+      }else{
+        if(message.split("(ASD)")[0]==="del"){
+          const result = await c.env.DB.prepare(
+            'DELETE FROM ADlink WHERE urlId = ?'
+          )
+          .bind(message.split("(ASD)")[2])
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
+        if(message.split("(ASD)")[0]==="rest"){
+          const result = await c.env.DB.prepare(
+            'UPDATE ADlink SET title = ?,xuhao = ?,postname = ?,linkUrl = ?,expritime = ? WHERE urlId = ?'
+          )
+          .bind(message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[7],message.split("(ASD)")[1])
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
+      }
+    } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+//管理端增删改email
 app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, async (c)=>{
+  try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
@@ -1352,6 +1629,9 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }else{
         if(message.split("(ASD)")[0]==="del"){
@@ -1360,6 +1640,9 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
         )
         .bind(message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
@@ -1367,11 +1650,22 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
         )
         .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改custcode
+//管理端增删改custcode
 app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, async (c)=>{
+  try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
@@ -1390,6 +1684,9 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],"758805")
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }else{
         if(message.split("(ASD)")[0]==="del"){
@@ -1398,6 +1695,9 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
         )
         .bind(message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
@@ -1405,49 +1705,77 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
         )
         .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改proaccount
+//管理端增删改proaccount
 app.post("/api/protected/adddelrest_account", securityMiddleware, authMiddleware, async (c)=>{
-    const user = c.get('jwtPayload')
-    const usernum = c.get('usernum')
-    const message=c.get("message")
-    const adminobj: any = await c.env.DB.prepare(
-      'SELECT * FROM admin WHERE adminname = ?'
-    )
-    .bind(user.username).first()
-    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
-    const res = await c.env.DB.prepare(
-        'SELECT * FROM proaccount WHERE proname = ?'
-    ).bind(message.split("(ASD)")[1]).first();
-    if(!res||!res.proimg||!res.prourl){
-      if(message.split("(ASD)")[0]==="add"){
-        const result = await c.env.DB.prepare(
-          'INSERT INTO proaccount (proname,proimg,prourl,publicid) VALUES (?,?,?,?)'
-        )
-        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
-        .run()
+   try{   
+      const user = c.get('jwtPayload')
+      const usernum = c.get('usernum')
+      const message=c.get("message")
+      const adminobj: any = await c.env.DB.prepare(
+        'SELECT * FROM admin WHERE adminname = ?'
+      )
+      .bind(user.username).first()
+      if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+      const res = await c.env.DB.prepare(
+          'SELECT * FROM proaccount WHERE proname = ?'
+      ).bind(message.split("(ASD)")[1]).first();
+      if(!res||!res.proimg||!res.prourl){
+        if(message.split("(ASD)")[0]==="add"){
+          const result = await c.env.DB.prepare(
+            'INSERT INTO proaccount (proname,proimg,prourl,publicid) VALUES (?,?,?,?)'
+          )
+          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
+      }else{
+          if(message.split("(ASD)")[0]==="del"){
+          const result = await c.env.DB.prepare(
+            'DELETE FROM proaccount WHERE proname = ?'
+          )
+          .bind(message.split("(ASD)")[1])
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
+        if(message.split("(ASD)")[0]==="rest"){
+          const result = await c.env.DB.prepare(
+            'UPDATE proaccount SET proimg = ?,prourl = ? WHERE proname = ?'
+          )
+          .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
+          .run()
+          return c.json({ 
+            success: true, 
+          })
+        }
       }
-    }else{
-        if(message.split("(ASD)")[0]==="del"){
-        const result = await c.env.DB.prepare(
-          'DELETE FROM proaccount WHERE proname = ?'
-        )
-        .bind(message.split("(ASD)")[1])
-        .run()
-      }
-      if(message.split("(ASD)")[0]==="rest"){
-        const result = await c.env.DB.prepare(
-          'UPDATE proaccount SET proimg = ?,prourl = ? WHERE proname = ?'
-        )
-        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
-        .run()
-      }
-    }
+    } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改paylist
+//管理端增删改paylist
 app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, async (c)=>{
+  try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
@@ -1458,7 +1786,7 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM paylist WHERE payname = ?'
-    ).bind(message.split("(ASD)")[2]).first();
+    ).bind(message.split("(ASD)")[1]).first();
     if(!res||!res.payimg){  
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
@@ -1466,6 +1794,9 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
@@ -1474,6 +1805,9 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
         )
         .bind(message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
@@ -1481,55 +1815,105 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
         )
         .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改会员标识
+//管理端增删改会员标识
 app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware, async (c)=>{
+  try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const message=c.get("message")
+    const message=c.get("message");
     const adminobj: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
-    .bind(user.username).first()
+    .bind(user.username).first();
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const deviceId: any = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE username = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(!deviceId||!deviceId.username)return c.json({ error: 'Invalid member' },401)
     const res = await c.env.DB.prepare(
         'SELECT * FROM member_start WHERE usernum = ?'
     ).bind(message.split("(ASD)")[1]).first();
-    if(!res||!res.type||!res.expires){
+    if(!res||!res.usernum||!res.type||!res.expires){
       if(message.split("(ASD)")[0]==="add"){        
         const result = await c.env.DB.prepare(
           'INSERT INTO member_start (usernum,user_id,type,publicid,expires) VALUES (?,?,?,?,?)'
         )
-        .bind(message.split("(ASD)")[1],user.id,message.split("(ASD)")[2],"758805",message.split("(ASD)")[3])
-        .run()
+        .bind(message.split("(ASD)")[1],deviceId.id,message.split("(ASD)")[2],"758805",message.split("(ASD)")[3])
+        .run();
         //关联user_sign表格
-        setupsignvrifig(c.env.DB,user.id,message,message.split("(ASD)")[1]);
+        const result1=await setupsignvrifig(c.env.DB,deviceId.id,message);
+        if(result1){
+          return c.json({ 
+            success: true, 
+          })
+        }else{
+          return c.json({ 
+            success: false, 
+          })
+        }
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
         const result = await c.env.DB.prepare(
           'DELETE FROM member_start WHERE usernum = ?'
         )
-        .bind(usernum)
+        .bind(message.split("(ASD)")[1])
         .run()        
         //关联user_sign表格
-        setupsignvrifig(c.env.DB,user.id,message,usernum);
+        const result1=await setupsignvrifig(c.env.DB,deviceId.id,message);
+        if(result1){
+          return c.json({ 
+            success: true, 
+          })
+        }else{
+          return c.json({ 
+            success: false, 
+          })
+        }
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
           'UPDATE member_start SET type = ?,expires = ? WHERE usernum = ?'
         )
-        .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],usernum)
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
         //关联user_sign表格
-        setupsignvrifig(c.env.DB,user.id,message,usernum);
+        const result1=await setupsignvrifig(c.env.DB,deviceId.id,message);
+        if(result1){
+          return c.json({ 
+            success: true, 
+          })
+        }else{
+          return c.json({ 
+            success: false, 
+          })
+        }
       }
     }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
-//增删改付款分类描述
+//管理端增删改付款分类描述
 app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, async (c)=>{
+  try{
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
     const message=c.get("message")
@@ -1548,6 +1932,9 @@ app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, 
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }else{
       if(message.split("(ASD)")[0]==="del"){
@@ -1555,7 +1942,10 @@ app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, 
           'DELETE FROM typepays WHERE typename = ?'
         )
         .bind(message.split("(ASD)")[1])
-        .run()        
+        .run() 
+        return c.json({ 
+            success: true, 
+          })       
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
@@ -1563,7 +1953,17 @@ app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, 
         )
         .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
+        return c.json({ 
+            success: true, 
+          })
       }
     }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
 })
 export default app

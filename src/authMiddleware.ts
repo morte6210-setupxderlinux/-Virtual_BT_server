@@ -41,7 +41,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
     c.set('message', meObj.message?meObj.message:"");
 
     // 驗證通過，繼續執行下一個中間件或 API 路由
-    await next();
+    return await next();
 };
 
 // 1. pem 轉 ArrayBuffer
