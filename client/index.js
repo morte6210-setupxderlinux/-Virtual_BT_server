@@ -22,15 +22,11 @@ fetch(serverUrl+"/api/public/findkey",{
 })
 async function nextpost(publicKeyF,privateKeyE){
     const requestData={
-        username:"",
-        password:"",
-        token:"",
-        message:"",
         nonce:""
     };
     const nonce1 = generateRandom6Digits(); 
     requestData.nonce=nonce1;
-    const timestamp1 = Math.floor(Date.now() / 1000).toString();
+    const timestamp1 = Math.floor(Date.now()/1000).toString();
     const encrypted10=await encryptflare(publicKeyF,JSON.stringify(requestData));
     fetch(serverUrl+"/api/auth/payselect",{
         method:"POST",
@@ -47,12 +43,13 @@ async function nextpost(publicKeyF,privateKeyE){
         return response.json();
     }).then(async data=>{
         if(data.success){
-            const message="";
+            let message="";
             const decrypted=await decryptflare(privateKeyE,data.encrypted);
-            data.setupArr[0].paylist.forEach((item)=>{
-                if(item.payname==="paypal")message+=encodeURIComponent(item.payurl);
-                if(item.payname==="wise")message+=encodeURIComponent(item.payurl);
-                if(decrypted===message)nextsetup(data.setupArr)
+            data.setupArr[0].paylist.forEach((item,index)=>{
+                message+=encodeURIComponent(item.payurl);
+                if((index+1)===data.setupArr[0].paylist.length&&decrypted===message){
+                    nextsetup(data.setupArr)
+                }
             })
         }
     }).catch(err=>{
@@ -73,7 +70,7 @@ function nextsetup(setupArr){
         
         if(index===0){
             setupArr[index].equity.forEach((item1,index1)=>{
-                html2+=`
+                if((index1+1)!==setupArr[index].equity.length)html2+=`
                     <li>${item1}</li>                    
                 `;
                 if((index1+1)===setupArr[index].equity.length){
@@ -81,21 +78,20 @@ function nextsetup(setupArr){
                 }
             })
             setupArr[index].price.forEach((item1,index1)=>{
-                html3+=`
+                if((index1+1)!==setupArr[index].price.length)html3+=`
                     <button>${item1}</button>
                 `;
                 if((index1+1)===setupArr[index].price.length){
                     document.querySelector(".main>.payselect>div:nth-child(2)").innerHTML=html3;
-                    paystart(index);
+                    paystart(index,setupArr);
                 }
             })
         }
               
         if((index+1)===setupArr.length){
-            document.querySelector(".main>.vipselect").innerHTML=html1; 
-            document.querySelector(".main>.vipselect>button:nth-child(2)").disabled=true;
-            document.querySelector(".main>.vipselect>button:nth-child(3)").disabled=true;          
+            document.querySelector(".main>.vipselect").innerHTML=html1;          
             document.querySelectorAll(".main>.vipselect>button").forEach((item0,index0)=>{
+                if(index0!==0)item0.disabled=true;
                 item0.onclick=function(e){
                     e.stopPropagation();html2="";html3="";
                     setupArr[index0].equity.forEach((item1,index1)=>{
@@ -112,7 +108,7 @@ function nextsetup(setupArr){
                         `;
                         if((index1+1)===setupArr[index0].price.length){
                             document.querySelector(".main>.payselect>div:nth-child(2)").innerHTML=html3;
-                            paystart(index0);
+                            paystart(index0,setupArr);
                         }
                     })
                 }
@@ -121,7 +117,7 @@ function nextsetup(setupArr){
     })
 }
 
-function paystart(indx){
+function paystart(indx,setupArr){
     document.querySelectorAll(".main>.payselect>div:nth-child(2)>button").forEach((item)=>{
         item.onclick=function(e){
             e.stopPropagation();

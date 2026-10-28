@@ -101,6 +101,7 @@ body { width:100%;height:100vh;}
 .main>.buttab2>div:nth-child(3)>ul>li>img{
     width:150px;
     height:200px;
+    margin-bottom: 10px;
 }
 .main>.buttab3{
     display: none;
@@ -118,7 +119,7 @@ body { width:100%;height:100vh;}
     height:40px;
     margin: 15px;
     display: flex;
-    justify-content: space-around;
+    justify-content: flex-start;
     align-items: center;
 }
 .main>.buttab3>div>.hdiv>h2{
@@ -126,7 +127,9 @@ body { width:100%;height:100vh;}
     height:100%;
     text-indent: 1em;
     line-height: 40px;
-    font-weight: bold;    
+    font-weight: bold;  
+    margin-left: 10px;  
+    margin-right: 10px;  
 }
 .main>.buttab3>div>.hdiv>button{
     width:100px;
@@ -184,7 +187,7 @@ body { width:100%;height:100vh;}
     line-height: 30px;
 }
 .main>.buttab3>div>ul>li>div>button{
-    width:40%;
+    width:30%;
     height:100%;
     border: 1px solid #000;
     border-radius: 5px;

@@ -4,7 +4,7 @@ const imgUrl=config.imgUrl;
 const urlParams = new URLSearchParams(window.location.search);
 const token=decodeURIComponent(urlParams.get('token'))||"";
 const username=decodeURIComponent(urlParams.get('username'))||"";
-if(!token||!username)window.location.href=clientUrl;
+if(!token||!username)window.location.href=clientUrl+"/admin";
 const nonce = generateRandom6Digits(); // 隨機數
 const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
 
@@ -22,9 +22,10 @@ fetch(serverUrl+"/api/public/findkey",{
     return response.json();
 }).then(data=>{
     if(data.success)nextpost(data.data.public_keyF,data.data.private_keyE)
-}).catch(err=>{
+}).catch(err=>{console.log(err)
     console.log(err);
 })
+
 async function nextpost(publicKeyF,privateKeyE){
     const custtoken=await decryptflare(privateKeyE,token);
     const usernum=await decryptflare(privateKeyE,username);
@@ -40,19 +41,20 @@ async function nextpost(publicKeyF,privateKeyE){
         }
         return response.json();
     }).then(data=>{
-        if(!data.success)window.location.href=clientUrl;  
-        nextimage();                     
+        if(!data.success)window.location.href=clientUrl+"/admin";  
+        nextimage();imagebut();
+        function imagebut(){
+            document.querySelector(".main>.buttab2>div:nth-child(2)>button").onclick=function(e){
+                e.stopPropagation();
+                const value=document.querySelector(".main>.buttab2>div:nth-child(1)>select").value;
+                uploadfile(data.user.id,data.user.username,value);
+            }
+        }                 
         document.querySelector(".buttop>button:nth-child(1)").onclick=function(e){
             e.stopPropagation();
             document.querySelector(".main>.buttab2").style.display="block";
-            document.querySelector(".main>.buttab3").style.display="none";            
-            document.querySelector(".main>.buttab2>div:nth-child(2)>select").oninput=function(e){
-                e.stopPropagation();let This=this;
-                document.querySelector(".main>.buttab2>div:nth-child(2)>button").onclick=function(e){
-                    e.stopPropagation();
-                    uploadfile(data.user.id,data.user.username,This.value);
-                }
-            }   
+            document.querySelector(".main>.buttab3").style.display="none";  
+            imagebut();
         }
         document.querySelector(".buttop>button:nth-child(2)").onclick=function(e){
             e.stopPropagation();
@@ -62,8 +64,9 @@ async function nextpost(publicKeyF,privateKeyE){
         }
     }).catch(err=>{
         console.log(err);
+        window.location.href=clientUrl+"/admin";
     })
-    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],types=[],typepost="rest";
+    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],types=[],typepost="rest";console.log(items)
     async function nextimage(){
         const requestData={
             username:JSON.parse(usernum).username,
@@ -96,7 +99,7 @@ async function nextpost(publicKeyF,privateKeyE){
             if(items.length>0){
                 items.forEach((item,index)=>{
                     html10+=`
-                        <li><img src="${item.file_key}"></li>
+                        <li><img src="${serverUrl}/files/${item.file_key}"></li>
                     `;
                     if((index+1)===items.length)document.querySelector(".main>.buttab2>div:nth-child(3)>ul").innerHTML=html10;
                 })
@@ -173,14 +176,13 @@ async function nextpost(publicKeyF,privateKeyE){
                             <div><p>序号：</p><input type="text" value="" disabled></div>
                             <div><p>机构：</p><input type="text" value="" disabled></div>
                             <div><p>外链：</p><input type="text" value="" disabled></div>
-                            <div><p>有效期：</p><input type="text" value="" disabled></div>
+                            <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="" disabled></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(1)>ul").innerHTML=html1;
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item)=>{
-                        item.querySelector("div:nth-child(2)>select").innerHTML=html7;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>div:nth-child(2)>select").innerHTML=html7;
+                    next_email();
                 }else{
                     newObj.adlist.forEach((item,index)=>{
                         html1+=`
@@ -191,7 +193,7 @@ async function nextpost(publicKeyF,privateKeyE){
                                 <div><p>序号：</p><input type="text" value="${item.xuhao}" disabled></div>
                                 <div><p>机构：</p><input type="text" value="${item.postname}" disabled></div>
                                 <div><p>外链：</p><input type="text" value="${item.linkUrl}" disabled></div>
-                                <div><p>有效期：</p><input type="text" value="${item.expritime}" disabled></div>
+                                <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="${item.expritime}" disabled></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -199,13 +201,15 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelector(".main>.buttab3>div:nth-child(1)>ul").innerHTML=html1;
                             document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(2)>select").innerHTML=html7;
-                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item1)=>{
-                                    if(newObj.adlist[index2].usernum===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.adlist[index2].usernum)item3.selected=true;
                                 })
                             })
+                            next_email();
                         }
                     })
                 }
+                function next_email(){
                 if(newObj.custemail.length<1){
                     html2=`
                         <li>
@@ -215,6 +219,7 @@ async function nextpost(publicKeyF,privateKeyE){
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(2)>ul").innerHTML=html2;
+                    next_code();
                 }else{
                     newObj.custemail.forEach((item,index)=>{
                         html2+=`
@@ -226,14 +231,16 @@ async function nextpost(publicKeyF,privateKeyE){
                         `;
                         if((index+1)===newObj.custemail.length){
                             document.querySelector(".main>.buttab3>div:nth-child(2)>ul").innerHTML=html2;
-                            document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2,index2)=>{
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.custemail[index2].typename===item1.value)item1.selected=true;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(2)>ul>li").forEach((item1,index1)=>{
+                                item1.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.custemail[index1].typename)item3.selected=true;
                                 })
                             })
+                            next_code();
                         }
                     })
-                }
+                }}
+                function next_code(){
                 if(newObj.custcode.length<1){
                     html3=`
                         <li>
@@ -243,9 +250,8 @@ async function nextpost(publicKeyF,privateKeyE){
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(3)>ul").innerHTML=html3;
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2)=>{
-                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>div:nth-child(1)>select").innerHTML=html8;
+                    next_account();
                 }else{
                     newObj.custcode.forEach((item,index)=>{
                         html3+=`
@@ -259,13 +265,15 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelector(".main>.buttab3>div:nth-child(3)>ul").innerHTML=html3;
                             document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.custcode[index2].codename===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.custcode[index2].codename)item3.selected=true;
                                 })
                             })
+                            next_account();
                         }
                     })
-                }
+                }}
+                function next_account(){
                 if(newObj.proaccount.length<1){
                     html4=`
                         <li>
@@ -276,9 +284,8 @@ async function nextpost(publicKeyF,privateKeyE){
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(4)>ul").innerHTML=html4;
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item2)=>{
-                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>div:nth-child(1)>select").innerHTML=html8;
+                    next_pay();
                 }else{
                     newObj.proaccount.forEach((item,index)=>{
                         html4+=`
@@ -293,13 +300,15 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelector(".main>.buttab3>div:nth-child(4)>ul").innerHTML=html4;
                             document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.proaccount[index2].codename===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.proaccount[index2].proname)item3.selected=true;
                                 })
                             })
+                            next_pay();
                         }
                     })
-                }
+                }}
+                function next_pay(){
                 if(newObj.paylist.length<1){
                     html5=`
                         <li>
@@ -310,9 +319,8 @@ async function nextpost(publicKeyF,privateKeyE){
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(5)>ul").innerHTML=html5; 
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item2)=>{
-                        item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>div:nth-child(1)>select").innerHTML=html8;
+                    next_member();
                 }else{
                     newObj.paylist.forEach((item,index)=>{
                         html5+=`
@@ -327,34 +335,35 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelector(".main>.buttab3>div:nth-child(5)>ul").innerHTML=html5;
                             document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(1)>select").innerHTML=html8;
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.paylist[index2].payname===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.paylist[index2].payname)item3.selected=true;
                                 })
                             })
+                            next_member();
                         }
                     })
-                }
+                }}
+                function next_member(){
                 if(newObj.memberlist.length<1){
                     html6=`
                         <li>
                             <div><p>归属：</p><select disabled></select></div>
                             <div><p>账户类别：</p><select disabled></select></div>
-                            <div><p>有效期：</p><input type="text" disabled></div>
+                            <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" disabled></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(6)>ul").innerHTML=html6; 
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item2)=>{
-                        item2.querySelector("div:nth-child(1)>select").innerHTML=html7;
-                        item2.querySelector("div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>div:nth-child(1)>select").innerHTML=html7;
+                    document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+                    next_types();
                 }else{
                     newObj.memberlist.forEach((item,index)=>{
                         html6+=`
                             <li>
                                 <div><p>归属：</p><select disabled></select></div>
                                 <div><p>账户类别：</p><select disabled></select></div>
-                                <div><p>有效期：</p><input type="text" value="${item.expires}" disabled></div>
+                                <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="${item.expires}" disabled></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -363,16 +372,18 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(1)>select").innerHTML=html7;
                                 item2.querySelector("div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.memberlist[index2].usernum===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.memberlist[index2].usernum)item3.selected=true;
                                 })
-                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item1)=>{
-                                    if(newObj.memberlist[index2].type===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(2)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.memberlist[index2].type)item3.selected=true;
                                 })
                             })
+                            next_types();
                         }
                     })
-                }
+                }}
+                function next_types(){
                 if(newObj.types.length<1){
                     html9=`
                         <li>
@@ -383,9 +394,8 @@ async function nextpost(publicKeyF,privateKeyE){
                         </li>
                     `;
                     document.querySelector(".main>.buttab3>div:nth-child(7)>ul").innerHTML=html9; 
-                    document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item2)=>{
-                        item2.querySelector("div:nth-child(1)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
-                    })
+                    document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>div:nth-child(1)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+                    nextsetdata(html7,html8);
                 }else{
                     newObj.types.forEach((item,index)=>{
                         html9+=`
@@ -400,28 +410,32 @@ async function nextpost(publicKeyF,privateKeyE){
                             document.querySelector(".main>.buttab3>div:nth-child(7)>ul").innerHTML=html9;
                             document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item2,index2)=>{
                                 item2.querySelector("div:nth-child(1)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
-                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item1)=>{
-                                    if(newObj.types[index2].typename===item1.value)item1.selected=true;
+                                item2.querySelectorAll("div:nth-child(1)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.types[index2].typename)item3.selected=true;
                                 })
                             })
+                            nextsetdata(html7,html8);
                         }
                     })
-                }
-                nextsetdata(html7);
+                }}                
             }
         }).catch(err=>{
             console.log(err);
         })
     }
-    function nextsetdata(html7){ 
+    function nextsetdata(html7,html8){ 
         nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();nexttypes();nextinputvalue();
         document.querySelector(".main>.buttab3>div:nth-child(1)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
-            if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(6)>input").value)return "有空白的表单未完成"
+            if(!adlist[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl)return alert("有空白表单未处理");
+            }
             let newLI=document.createElement("li");
             newLI.innerHTML=`
                 <div><p>ID：</p><input type="text" disabled value="${generateRandom6Digits()+Date.now()}"></div>
-                <div><p>归属：</p><select disabled></select></div>
+                <div><p>归属：</p><select disabled>${html7}</select></div>
                 <div><p>标题：</p><input type="text" value="" disabled></div>
                 <div><p>序号：</p><input type="text" value="" disabled></div>
                 <div><p>机构：</p><input type="text" value="" disabled></div>
@@ -431,27 +445,118 @@ async function nextpost(publicKeyF,privateKeyE){
             `;
             let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li")[0];
             document.querySelector(".main>.buttab3>div:nth-child(1)>ul").insertBefore(newLI,oldLI);
-            document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(2)>select").innerHTML=html7;
             typepost="add";nextadlink();nextinputvalue();
+        }
+        document.querySelector(".main>.buttab3>div:nth-child(2)>.hdiv>button").onclick=function(e){
+            e.stopPropagation();
+            if(!custemail[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber)return alert("有空白表单未处理");
+            }
+            const html11=`<option value="devpro">devpro</option><option value="cust">cust</option>`;
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled>${html11}</select></div>
+                <div><p>邮箱号：</p><input type="text" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(2)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(2)>ul").insertBefore(newLI,oldLI);
+            typepost="add";nextcustemail();nextinputvalue();
+        }
+        document.querySelector(".main>.buttab3>div:nth-child(3)>.hdiv>button").onclick=function(e){
+            e.stopPropagation();
+            if(!custcode[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg)return alert("有空白表单未处理");
+            }
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled>${html8}</select></div>
+                <div><p>链接：</p><input type="text" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(3)>ul").insertBefore(newLI,oldLI);
+            typepost="add";nextcustcode();nextinputvalue();
+        }
+        document.querySelector(".main>.buttab3>div:nth-child(4)>.hdiv>button").onclick=function(e){
+            e.stopPropagation();
+            if(!proaccount[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg)return alert("有空白表单未处理");
+            }
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled>${html8}</select></div>
+                <div><p>头像：</p><input type="text" disabled></div>
+                <div><p>链接：</p><input type="text" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(4)>ul").insertBefore(newLI,oldLI);
+            typepost="add";nextproaccount();nextinputvalue();
+        }
+        document.querySelector(".main>.buttab3>div:nth-child(5)>.hdiv>button").onclick=function(e){
+            e.stopPropagation();
+            if(!paylist[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg)return alert("有空白表单未处理");
+            }
+            let newLI=document.createElement("li");
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled>${html8}</select></div>                
+                <div><p>链接：</p><input type="text" disabled></div>
+                <div><p>跳转：</p><input type="text" disabled></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(5)>ul").insertBefore(newLI,oldLI);
+            typepost="add";nextpaylist();nextinputvalue();
         }
         document.querySelector(".main>.buttab3>div:nth-child(6)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
-            if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(2)>select").value)return alert("有空白的表单未完成");
+            if(!memberlist[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li:nth-child(1)>div:nth-child(3)>input").value&&memberlist[0].linkUrl)return alert("有空白表单未处理");
+            }
+            const html11=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
             let newLI=document.createElement("li");
             newLI.innerHTML=`
-                <div><p>归属：</p><select disabled></select></div>
-                <div><p>账户类别：</p><select disabled></select></div>
+                <div><p>归属：</p><select disabled>${html7}</select></div>
+                <div><p>账户类别：</p><select disabled>${html11}</select></div>
                 <div><p>有效期：</p><input type="text" disabled></div>
                 <div><button>修改</button><button>保存</button><button>删除</button></div>
             `;
             let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li")[0];
             document.querySelector(".main>.buttab3>div:nth-child(6)>ul").insertBefore(newLI,oldLI);
-            document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").innerHTML=html7;
-            document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(2)>select").innerHTML=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
             typepost="add";nextmember();nextinputvalue();
         }
+        document.querySelector(".main>.buttab3>div:nth-child(7)>.hdiv>button").onclick=function(e){
+            e.stopPropagation();
+            if(!types[0]){
+                return alert("有空白表单未处理");
+            }else{
+                if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li:nth-child(1)>div:nth-child(3)>textarea").value&&types[0].price)return alert("有空白表单未处理");
+            }
+            let newLI=document.createElement("li");
+            const html11=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
+            newLI.innerHTML=`
+                <div><p>归属：</p><select disabled>${html11}</select></div>                
+                <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
+                <div><p>价格：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
+                <div><button>修改</button><button>保存</button><button>删除</button></div>
+            `;
+            let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li")[0];
+            document.querySelector(".main>.buttab3>div:nth-child(7)>ul").insertBefore(newLI,oldLI);
+            typepost="add";nexttypes();nextinputvalue();
+        }
     }
-
     let adlinkobj={usernum:"",urlId:"",title:"",xuhao:"",postname:"",linkUrl:"",expritime:""};
     let custemailobj={typename:"",enumber:""};
     let custcodeobj={codename:"",codeimg:""};
@@ -459,225 +564,137 @@ async function nextpost(publicKeyF,privateKeyE){
     let payobj={payname:"",payimg:"",payurl:""};
     let memberobj={usernum:"",type:"",expires:""};
     let typesobj={typename:"",content:"",price:""};
-    function nextinputvalue(){
-        let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0;
-        const reg=/select|update|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|union|and|or|--|\'|\"/i;
+    let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0;
+    const reg=/select|update|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|union|and| or |--|\'|\"/i;
+    function nextinputvalue(){        
         document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(2)>select>option").onclick=function(e){
+            item.querySelector("div:nth-child(3)>input").oninput=function(e){
+                e.stopPropagation();
                 if(index!==adlink_index){
                     adlink_index=index;
                     adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
                 }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(item.querySelectorAll("div:nth-child(2)>select").value))return alert("文本不安全");
-                adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
-                adlinkobj.usernum=item.querySelectorAll("div:nth-child(2)>select").value;
-            }
-            item.querySelector("div:nth-child(3)>input").oninpit=function(e){
-                e.stopPropagation();let This=this;
-                if(index!==adlink_index){
-                    adlink_index=index;
-                    adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
-                }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(This.value))return alert("文本不安全");
                 adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
                 adlinkobj.title=this.value;
             }
             item.querySelector("div:nth-child(4)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==adlink_index){
                     adlink_index=index;
                     adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
                 }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(This.value))return alert("文本不安全");
                 adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
                 adlinkobj.xuhao=this.value;
             }
             item.querySelector("div:nth-child(5)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==adlink_index){
                     adlink_index=index;
                     adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
                 }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(This.value))return alert("文本不安全");
                 adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
                 adlinkobj.postname=this.value;
             }
             item.querySelector("div:nth-child(6)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==adlink_index){
                     adlink_index=index;
                     adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
                 }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(This.value))return alert("文本不安全");
                 adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
                 adlinkobj.linkUrl=this.value;
             }
             item.querySelector("div:nth-child(7)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==adlink_index){
                     adlink_index=index;
                     adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
                 }
-                if(reg.test(item.querySelector("div:nth-child(1)>input").value)||reg.test(This.value))return alert("文本不安全");
                 adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
                 adlinkobj.expritime=this.value;
             }
         })
         document.querySelectorAll(".main>.buttab3>div:nth-child(2)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
-                if(index!==email_index){
-                    email_index=index;
-                    custemailobj.typename="";custemailobj.enumber="";
-                }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                custemailobj.typename=item.querySelectorAll("div:nth-child(1)>select").value;
-            }
             item.querySelector("div:nth-child(2)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==email_index){
                     email_index=index;
                     custemailobj.typename="";custemailobj.enumber="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 custemailobj.enumber=this.value;
             }
-        })
+        })  
         document.querySelectorAll(".main>.buttab3>div:nth-child(3)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
-                if(index!==custcode_index){
-                    custcode_index=index;
-                    custcodeobj.codename="";custcodeobj.codeimg="";
-                }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                custcodeobj.codename=item.querySelectorAll("div:nth-child(1)>select").value;
-                items.some((itm)=>{
-                    if(itm.content===custcodeobj.codename)item.querySelector("div:nth-child(2)>input").value=itm.file_key;
-                })
-            }
             item.querySelector("div:nth-child(2)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==custcode_index){
                     custcode_index=index;
                     custcodeobj.codename="";custcodeobj.codeimg="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
-                custcodeobj.codeimg==this.value;
+                custcodeobj.codeimg=this.value;
             }
-        })
+        })       
         document.querySelectorAll(".main>.buttab3>div:nth-child(4)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
-                if(index!==account_index){
-                    account_index=index;
-                    proaccountObj.proname="";proaccountObj.proimg="";proaccountObj.prourl="";
-                }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                proaccountObj.proname=item.querySelectorAll("div:nth-child(1)>select").value;
-                items.some((itm)=>{
-                    if(itm.content===proaccountObj.proname)item.querySelector("div:nth-child(2)>input").value=itm.file_key
-                })
-            }
             item.querySelector("div:nth-child(2)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==account_index){
                     account_index=index;
                     proaccountObj.proname="";proaccountObj.proimg="";proaccountObj.prourl="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 proaccountObj.proimg=this.value;
             }
             item.querySelector("div:nth-child(3)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==account_index){
                     account_index=index;
                     proaccountObj.proname="";proaccountObj.proimg="";proaccountObj.prourl="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 proaccountObj.prourl=this.value;
             }
         })
         document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
-                if(index!==pay_index){
-                    pay_index=index;
-                    payobj.payname="";payobj.payimg="";payobj.payurl="";
-                }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                payobj.payname=item.querySelectorAll("div:nth-child(1)>select").value;
-                items.some((itm)=>{
-                    if(itm.content===payobj.payname)item.querySelector("div:nth-child(2)>input").value=itm.file_key
-                })
-            }
             item.querySelector("div:nth-child(2)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==pay_index){
                     pay_index=index;
                     payobj.payname="";payobj.payimg="";payobj.payurl="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 payobj.payimg=this.value;
             }
             item.querySelector("div:nth-child(3)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==pay_index){
                     pay_index=index;
                     payobj.payname="";payobj.payimg="";payobj.payurl="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 payobj.payurl=this.value;
             }
         })
         document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
+            item.querySelector("div:nth-child(3)>input").oninput=function(e){
+                e.stopPropagation();
                 if(index!==member_index){
                     member_index=index;
                     memberobj.usernum="";memberobj.type="";memberobj.expires="";
                 }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                memberobj.usernum=item.querySelectorAll("div:nth-child(1)>select").value;
-            }
-            item.querySelectorAll("div:nth-child(2)>select>option").onclick=function(e){
-                if(index!==member_index){
-                    member_index=index;
-                    memberobj.usernum="";memberobj.type="";memberobj.expires="";
-                }
-                if(reg.test(item.querySelectorAll("div:nth-child(2)>select").value))return alert("文本不安全");
-                memberobj.type=item.querySelectorAll("div:nth-child(2)>select").value;
-            }
-            item.querySelector("div:nth-child(2)>input").oninput=function(e){
-                e.stopPropagation();let This=this;
-                if(index!==member_index){
-                    member_index=index;
-                    memberobj.usernum="";memberobj.type="";memberobj.expires="";
-                }
-                if(reg.test(This.value))return alert("文本不安全");
                 memberobj.expires=this.value;
             }
         })
         document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li").forEach((item,index)=>{
-            item.querySelectorAll("div:nth-child(1)>select>option").onclick=function(e){
+            item.querySelector("div:nth-child(2)>textarea").oninput=function(e){
+                e.stopPropagation();
                 if(index!==types_index){
                     types_index=index;
                     typesobj.typename="";typesobj.content="";typesobj.price="";
                 }
-                if(reg.test(item.querySelectorAll("div:nth-child(1)>select").value))return alert("文本不安全");
-                typesobj.typename=item.querySelectorAll("div:nth-child(1)>select").value;
-            }
-            item.querySelectorAll("div:nth-child(2)>textarea").oninput=function(e){
-                e.stopPropagation();let This=this;
-                if(index!==types_index){
-                    types_index=index;
-                    typesobj.typename="";typesobj.content="";typesobj.price="";
-                }
-                if(reg.test(This.value))return alert("文本不安全");
                 typesobj.content=this.value;
             }
             item.querySelector("div:nth-child(3)>textarea").oninput=function(e){
-                e.stopPropagation();let This=this;
+                e.stopPropagation();
                 if(index!==types_index){
                     types_index=index;
                     typesobj.typename="";typesobj.content="";typesobj.price="";
                 }
-                if(reg.test(This.value))return alert("文本不安全");
                 typesobj.price=this.value;
             }
         })
@@ -686,49 +703,71 @@ async function nextpost(publicKeyF,privateKeyE){
         document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
             item.querySelector("div:nth-child(8)>button:nth-child(1)").onclick=function(e){
                 e.stopPropagation();
+                if(!item.querySelector("div:nth-child(2)>select").value)return alert("没有注册用户");
                 item.querySelector("div:nth-child(2)>select").disabled=false;
                 item.querySelector("div:nth-child(3)>input").disabled=false;
                 item.querySelector("div:nth-child(4)>input").disabled=false;
                 item.querySelector("div:nth-child(5)>input").disabled=false;
                 item.querySelector("div:nth-child(6)>input").disabled=false;
                 item.querySelector("div:nth-child(7)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(6)>input").value)typepost="add";
                 item.querySelector("div:nth-child(8)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!adlinkobj.usernum||!adlinkobj.title||!adlinkobj.xuhao||!adlinkobj.postname||!adlinkobj.linkUrl||!adlinkobj.expritime)return alert("信息未填全");
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)>div:nth-child(6)>input").value&&adlist[0]&&adlist[0].linkUrl)return alert("有空白表单未处理");                   
+                    if(index!==adlink_index){
+                        adlink_index=index;
+                        adlinkobj.usernum="";adlinkobj.urlId="";adlinkobj.title="";adlinkobj.xuhao="";adlinkobj.postname="";adlinkobj.linkUrl="";adlinkobj.expritime="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>input").value)
+                    ||reg.test(item.querySelector("div:nth-child(2)>select").value)
+                    ||reg.test(item.querySelector("div:nth-child(3)>input").value)
+                    ||reg.test(item.querySelector("div:nth-child(4)>input").value)
+                    ||reg.test(item.querySelector("div:nth-child(5)>input").value)
+                    ||reg.test(item.querySelector("div:nth-child(6)>input").value)
+                    ||reg.test(item.querySelector("div:nth-child(7)>input").value)
+                    )return alert("文本不安全");
+                    adlinkobj.urlId=item.querySelector("div:nth-child(1)>input").value;
+                    adlinkobj.usernum=item.querySelector("div:nth-child(2)>select").value;                   
+                    if(!adlinkobj.urlId||!adlinkobj.usernum||!adlinkobj.title||!adlinkobj.xuhao||!adlinkobj.postname||!adlinkobj.linkUrl||!adlinkobj.expritime)return alert("信息未填全");
                     const pathurl="/api/protected/adddelrest_adlink";
                     const requestData={
                         username:JSON.parse(usernum).username,
                         password:"",
                         token:"",
-                        message:typepost+"(ASD)"+adlinkobj.urlId+"(ASD)"+adlinkobj.title+"(ASD)"+adlinkobj.xuhao+"(ASD)"+adlinkobj.postname+"(ASD)"+adlinkobj.linkUrl+"(ASD)"+adlinkobj.expritime,
+                        message:typepost+"(ASD)"+adlinkobj.usernum,
                         nonce:""
                     };
                     const nonce11 = generateRandom6Digits(); 
                     requestData.nonce=nonce11;
+                    const message=adlinkobj.urlId+"(ASD)"+adlinkobj.title+"(ASD)"+adlinkobj.xuhao+"(ASD)"+adlinkobj.postname+"(ASD)"+encodeURIComponent(adlinkobj.linkUrl)+"(ASD)"+adlinkobj.expritime
                     const timestamp11 = Math.floor(Date.now() / 1000).toString();
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","",message)
                 }
                 item.querySelector("div:nth-child(8)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(1)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl){
                         typepost="rest";
-                        return alert("有空白表单未处理");                        
-                    }
-                    const pathurl="/api/protected/adddelrest_adlink";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>input").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(1)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(1)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理"); 
+                        }                    
+                    }else{
+                        const pathurl="/api/protected/adddelrest_adlink";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelector("div:nth-child(1)>input").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(1)>ul"),""); 
+                    }                       
                 }
             }
         })
@@ -739,8 +778,18 @@ async function nextpost(publicKeyF,privateKeyE){
                 e.stopPropagation();
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(2)>input").value)typepost="add";
                 item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custemail[0]&&custemail[0].enumber)return alert("有空白表单未处理");
+                    if(index!==email_index){
+                        email_index=index;
+                        custemailobj.typename="";custemailobj.enumber="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value)
+                    ||reg.test(item.querySelector("div:nth-child(2)>input").value)
+                    )return alert("文本不安全");
+                    custemailobj.typename=item.querySelector("div:nth-child(1)>select").value;
                     if(!custemailobj.typename||!custemailobj.enumber)return alert("信息未填全");
                     const pathurl="/api/protected/adddelrest_email";
                     const requestData={
@@ -758,24 +807,28 @@ async function nextpost(publicKeyF,privateKeyE){
                 }
                 item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(2)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber){
                         typepost="rest";
-                        return alert("有空白表单未处理");                        
-                    }
-                    const pathurl="/api/protected/adddelrest_email";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(2)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(2)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理");
+                        }                      
+                    }else{
+                        const pathurl="/api/protected/adddelrest_email";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(2)>ul"));
+                    }                        
                 }
             }
         })
@@ -786,42 +839,64 @@ async function nextpost(publicKeyF,privateKeyE){
                 e.stopPropagation();
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(2)>input").value)typepost="add";
                 item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
-                    const pathurl="/api/protected/adddelrest_code";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:typepost+"(ASD)"+custcodeobj.codename+"(ASD)"+custcodeobj.codeimg,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custcode[0]&&custcode[0].codeimg)return alert("有空白表单未处理");
+                    if(index!==custcode_index){
+                        custcode_index=index;
+                        custcodeobj.codename="";custcodeobj.codeimg="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value))return alert("文本不安全");
+                    custcodeobj.codename=item.querySelector("div:nth-child(1)>select").value;
+                    items.forEach(async (item11,index11)=>{
+                        if(item11.content===custcodeobj.codename){
+                            item.querySelector("div:nth-child(2)>input").value=`${serverUrl}/files/${item11.file_key}`;
+                            custcodeobj.codeimg=`${serverUrl}/files/${item11.file_key}`;
+                        }
+                        if((index11+1)===items.length){
+                            alert(JSON.stringify(custcodeobj))
+                            if(!custcodeobj.codename||!custcodeobj.codeimg)return alert("信息未填全");
+                            const pathurl="/api/protected/adddelrest_code";
+                            const requestData={
+                                username:JSON.parse(usernum).username,
+                                password:"",
+                                token:"",
+                                message:typepost+"(ASD)"+custcodeobj.codename+"(ASD)"+custcodeobj.codeimg,
+                                nonce:""
+                            };
+                            const nonce11 = generateRandom6Digits(); 
+                            requestData.nonce=nonce11;
+                            const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                            const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                        }
+                    })                            
                 }
                 item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(3)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg){
                         typepost="rest";
-                        return alert("有空白表单未处理");                        
-                    }
-                    const pathurl="/api/protected/adddelrest_code";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(3)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(3)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理");
+                        }                        
+                    }else{
+                        const pathurl="/api/protected/adddelrest_code";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(3)>ul")); 
+                    }                       
                 }
             }
         })
@@ -833,9 +908,25 @@ async function nextpost(publicKeyF,privateKeyE){
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>input").disabled=false;
                 item.querySelector("div:nth-child(3)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(2)>input").value)typepost="add";
                 item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
-                    if(proaccountObj.proname||!proaccountObj.proimg||!proaccountObj.prourl)return alert("信息未填全")
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0]&&proaccount[0].proimg)return alert("有空白表单未处理");
+                    if(index!==account_index){
+                        account_index=index;
+                        proaccountObj.proname="";proaccountObj.proimg="";proaccountObj.prourl="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value)
+                    ||reg.test(item.querySelector("div:nth-child(3)>input").value)
+                    )return alert("文本不安全");
+                    proaccountObj.proname=item.querySelector("div:nth-child(1)>select").value;
+                    items.some((itm)=>{
+                        if(itm.content===proaccountObj.proname){
+                            item.querySelector("div:nth-child(2)>input").value=`${serverUrl}/files/${itm.file_key}`;
+                            proaccountObj.proimg=`${serverUrl}/files/${itm.file_key}`;
+                        }
+                    })
+                    if(!proaccountObj.proname||!proaccountObj.proimg||!proaccountObj.prourl)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_account";
                     const requestData={
                         username:JSON.parse(usernum).username,
@@ -852,36 +943,57 @@ async function nextpost(publicKeyF,privateKeyE){
                 }
                 item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(4)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg){
                         typepost="rest";
-                        return alert("有空白表单未处理");                        
-                    }
-                    const pathurl="/api/protected/adddelrest_account";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(4)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(4)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理");
+                        }                        
+                    }else{
+                        const pathurl="/api/protected/adddelrest_account";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(4)>ul")); 
+                    }                       
                 }
             }
         })
     };
     function nextpaylist(){
         document.querySelectorAll(".main>.buttab3>div:nth-child(5)>ul>li").forEach((item,index)=>{
-            item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+            item.querySelector("div:nth-child(4)>button:nth-child(1)").onclick=function(e){
                 e.stopPropagation();
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>input").disabled=false;
-                item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
+                item.querySelector("div:nth-child(3)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(2)>input").value)typepost="add";
+                item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&paylist[0]&&paylist[0].payimg)return alert("有空白表单未处理");
+                    if(index!==pay_index){
+                        pay_index=index;
+                        payobj.payname="";payobj.payimg="";payobj.payurl="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value)
+                    ||reg.test(item.querySelector("div:nth-child(3)>input").value)
+                    )return alert("文本不安全");
+                    payobj.payname=item.querySelector("div:nth-child(1)>select").value;
+                    items.some((itm)=>{
+                        if(itm.content===payobj.payname){
+                            item.querySelector("div:nth-child(2)>input").value=`${serverUrl}/files/${itm.file_key}`;
+                            payobj.payimg=`${serverUrl}/files/${itm.file_key}`;
+                        }
+                    })
                     if(!payobj.payname||!payobj.payimg||!payobj.payurl)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_pay";
                     const requestData={
@@ -897,26 +1009,30 @@ async function nextpost(publicKeyF,privateKeyE){
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
                     postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
                 }
-                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(5)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg){
                         typepost="rest";
-                        return alert("有空白表单未处理");                        
-                    }
-                    const pathurl="/api/protected/adddelrest_pay";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(5)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(5)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)"));
+                        }else{    
+                            return alert("有空白表单未处理");
+                        }                        
+                    }else{
+                        const pathurl="/api/protected/adddelrest_pay";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(5)>ul")); 
+                    }                       
                 }
             }
         })
@@ -925,46 +1041,62 @@ async function nextpost(publicKeyF,privateKeyE){
         document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li").forEach((item,index)=>{
             item.querySelector("div:nth-child(4)>button:nth-child(1)").onclick=function(e){
                 e.stopPropagation();
+                if(!item.querySelector("div:nth-child(1)>select").value)return alert("没有注册用户");
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>select").disabled=false;
                 item.querySelector("div:nth-child(3)>input").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(3)>input").value)typepost="add";
                 item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li:nth-child(1)>div:nth-child(3)>input").value&&memberlist[0]&&memberlist[0].expires)return alert("有空白表单未处理");
+                    if(index!==member_index){
+                        member_index=index;
+                        memberobj.usernum="";memberobj.type="";memberobj.expires="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value))return alert("文本不安全");
+                    memberobj.usernum=item.querySelector("div:nth-child(1)>select").value;
+                    if(reg.test(item.querySelector("div:nth-child(2)>select").value))return alert("文本不安全");
+                    memberobj.type=item.querySelector("div:nth-child(2)>select").value;
+                    if(reg.test(item.querySelector("div:nth-child(3)>input").value))return alert("文本不安全");
                     if(!memberobj.usernum||!memberobj.type||!memberobj.expires)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_member";
                     const requestData={
                         username:JSON.parse(usernum).username,
                         password:"",
                         token:"",
-                        message:typepost+"(ASD)"+memberobj.type+"(ASD)"+memberobj.expires,
+                        message:typepost+"(ASD)"+memberobj.usernum+"(ASD)"+memberobj.type+"(ASD)"+memberobj.expires,
                         nonce:""
                     };
                     const nonce11 = generateRandom6Digits(); 
                     requestData.nonce=nonce11;
                     const timestamp11 = Math.floor(Date.now() / 1000).toString();
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                 }
                 item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&memberlist[0].usernum){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(6)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li:nth-child(1)>div:nth-child(3)>input").value&&memberlist[0].expires){
                         typepost="rest";
-                        return alert("有空白表单未处理");
-                    }
-                    const pathurl="/api/protected/adddelrest_member";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(6)>ul"));                        
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(6)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理");
+                        }
+                    }else{
+                        const pathurl="/api/protected/adddelrest_member";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(6)>ul"),"");
+                    }                        
                 }
             }
         })
@@ -976,48 +1108,64 @@ async function nextpost(publicKeyF,privateKeyE){
                 item.querySelector("div:nth-child(1)>select").disabled=false;
                 item.querySelector("div:nth-child(2)>textarea").disabled=false;
                 item.querySelector("div:nth-child(3)>textarea").disabled=false;
+                if(index===0&&!item.querySelector("div:nth-child(3)>textarea").value)typepost="add";
                 item.querySelector("div:nth-child(4)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li:nth-child(1)>div:nth-child(3)>textarea").value&&types[0]&&types[0].price)return alert("有空白表单未处理");
+                    if(index!==types_index){
+                        types_index=index;
+                        typesobj.typename="";typesobj.content="";typesobj.price="";
+                    }
+                    if(reg.test(item.querySelector("div:nth-child(1)>select").value)
+                    ||reg.test(item.querySelector("div:nth-child(2)>textarea").value)
+                    ||reg.test(item.querySelector("div:nth-child(3)>textarea").value)
+                    )return alert("文本不安全");
+                    typesobj.typename=item.querySelector("div:nth-child(1)>select").value;
                     if(!typesobj.typename||!typesobj.content||!typesobj.price)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_types";
                     const requestData={
                         username:JSON.parse(usernum).username,
                         password:"",
                         token:"",
-                        message:typepost+"(ASD)"+typesobj.typename+"(ASD)"+typesobj.content+"(ASD)"+typesobj.price,
+                        message:typepost+"(ASD)"+typesobj.typename,
                         nonce:""
                     };
                     const nonce11 = generateRandom6Digits(); 
                     requestData.nonce=nonce11;
+                    const message=typesobj.content+"(ASD)"+typesobj.price;
                     const timestamp11 = Math.floor(Date.now() / 1000).toString();
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","",message)
                 }
                 item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)>div:nth-child(1)>select").value&&types[0].typename){
-                        if(index===0)document.querySelector(".main>.buttab3>div:nth-child(7)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)"));
+                    if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li:nth-child(1)>div:nth-child(3)>textarea").value&&types[0].price){
                         typepost="rest";
-                        return alert("有空白表单未处理");
+                        if(index===0){
+                            document.querySelector(".main>.buttab3>div:nth-child(7)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)"));
+                        }else{
+                            return alert("有空白表单未处理");
+                        }
+                    }else{
+                        const pathurl="/api/protected/adddelrest_types";
+                        const requestData={
+                            username:JSON.parse(usernum).username,
+                            password:"",
+                            token:"",
+                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
+                            nonce:""
+                        };
+                        const nonce11 = generateRandom6Digits(); 
+                        requestData.nonce=nonce11;
+                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(7)>ul"));                        
                     }
-                    const pathurl="/api/protected/adddelrest_types";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(7)>ul"));                        
                 }
             }
         })
     }
-    function postserver(pathurl,nonce0,timestamp0,encrypted0,item0,nodent){
+    function postserver(pathurl,nonce0,timestamp0,encrypted0,item0,nodent,message){
         fetch(serverUrl+pathurl,{
             method:"POST",
             headers:{
@@ -1026,7 +1174,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 'x-request-timestamp': timestamp0,
                 "Authorization":`Bearer ${custtoken}`
             },
-            body:JSON.stringify({encrypted:encrypted0})
+            body:JSON.stringify({encrypted:encrypted0,message:message})
         }).then(response=>{
             if(!response.ok){
                 throw new Error(`HTTP 错误！状态码：${response.status}`)
@@ -1035,6 +1183,7 @@ async function nextpost(publicKeyF,privateKeyE){
         }).then(data=>{
             console.log(data);
             if(nodent&&item0)nodent.removeChild(item0);
+            document.querySelector(".buttop>button:nth-child(2)").click();
             typepost="rest";
         }).catch(err=>{
             console.log(err);
@@ -1065,7 +1214,7 @@ async function nextpost(publicKeyF,privateKeyE){
             if(result.success){
                 let newLI=document.createElement("li");
                 let oldLI=document.querySelector(".main>.buttab2>div:nth-child(3)>ul>li:nth-child(1)");
-                let html=`<img src="${imgUrl+result.fileUrl}">`;
+                let html=`<img src="${serverUrl+result.fileUrl}">`;
                 document.querySelector(".main>.buttab2>div:nth-child(3)>ul").insertBefore(newLI,oldLI);
                 document.querySelector(".main>.buttab2>div:nth-child(3)>ul>li:nth-child(1)").innerHTML=html;
             }
@@ -1101,7 +1250,7 @@ function encryptflare(pem,str){
             // 將加密後的 ArrayBuffer 轉回 Base64 方便傳輸或檢視
             const base64Cipher = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
             resolve(base64Cipher);
-        } catch (err) {
+        } catch (err) {console.log(err)
             resolve(null);
         }
     });

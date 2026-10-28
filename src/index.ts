@@ -147,7 +147,6 @@ async function initializeDatabase(db: D1Database) {
           postname TEXT NOT NULL,
           linkUrl TEXT NOT NULL,
           expritime DATETIME,
-          publicid TEXT NOT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -752,7 +751,7 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
   }
 })
 // 用户获取付款分类描述
-app.post('/api/auth/device/payselect', securityMiddleware,deviceauthMiddleware, async (c) => {
+app.post('/api/auth/device/payselect', deviceSecurityMiddleware,deviceauthMiddleware, async (c) => {
   try {
     const body = await c.req.json();
     const nonce = c.req.header('x-request-nonce');
@@ -827,80 +826,93 @@ app.post('/api/auth/device/payselect', securityMiddleware,deviceauthMiddleware, 
   }
 })
 // 管理端获取付款分类描述
-app.post('/api/auth/payselect', securityMiddleware,authMiddleware, async (c) => {
+app.post('/api/auth/payselect', securityMiddleware, async (c) => {
   try {
     const body = await c.req.json();
     const nonce = c.req.header('x-request-nonce');
-    const query = 'SELECT * FROM system_keys WHERE key_name = ?'
+    const query = 'SELECT * FROM system_keys WHERE key_name = ?';
     const res = await c.env.DB.prepare(query)
       .bind("default")
-      .all() 
-    if(res.results.length>0&&res.results[0].public_keyE&&res.results[0].private_keyF){
-        const privateKeyPem = res.results[0].private_keyF as string;
-        const decrypted=await decryptflare(privateKeyPem,body.encrypted) as string;
-        if(nonce!==JSON.parse(decrypted).nonce)return c.json({success: false}, 400);
-        
-        const query1 = 'SELECT * FROM paylist WHERE publicid = ?'
-        const res1:any = await c.env.DB.prepare(query1).bind("758805").all();
-        const query2 = 'SELECT * FROM typepays WHERE publicid = ?'
-        const res2:any = await c.env.DB.prepare(query2).bind("758805").all();  
-        if(!res1||!res1.results[0]||!res2||!res2.results[0])return c.json({success: false,}, 400);
-        let message="";
-        [...res1.results].forEach((item)=>{
-          if(item.payname==="paypal")message+=encodeURIComponent(item.payurl);
-          if(item.payname==="wise")message+=encodeURIComponent(item.payurl);
-        })
-        const setupArr=[] as any;
-        [...res2.results].forEach(async (item1,index1) => {
-          if(item1.typename==="donate"){
-            setupArr.push({
-              value:"donate",
-              name:"捐赠",
-              equity:item1.content.split(";"),
-              price:item1.price.split(";"),
-              paylist:[...res1.results]
-            })          
-          }
-          if(item1.typename==="subscription"){
-            setupArr.push({
-              value:"subscription",
-              name:"订阅",
-              equity:item1.content.split(";"),
-              price:item1.price.split(";"),
-              paylist:[...res1.results]
-            })
-          }
-          if(item1.typename==="lifetime"){
-            setupArr.push({
-              value:"lifetime",
-              name:"终身",
-              equity:item1.content.split(";"),
-              price:item1.price.split(";"),
-              paylist:[...res1.results]
-            })
-          }
-          if((index1+1)===[...res2.results].length){
-            const publicKeyPem = res.results[0].public_keyE as string;
-            const encrypted=await encryptflare(publicKeyPem,message);
-            return c.json({
-                success: true, 
-                encrypted:encrypted,
-                setupArr:setupArr
-            })
-          }
-        });
-    }
+      .all(); 
 
-    return c.json({success: false,}, 400)
-    
-  } catch (err: any) {console.log(err)
-    // 4. 捕獲並返回異常錯誤
+    if (res.results.length > 0 && res.results[0].public_keyE && res.results[0].private_keyF) {
+      const privateKeyPem = res.results[0].private_keyF as string;
+      const decrypted = await decryptflare(privateKeyPem, body.encrypted) as string;
+      
+      // 驗證 Nonce
+      if (nonce !== JSON.parse(decrypted).nonce) {
+        return c.json({ success: false, error: 'Nonce mismatch' }, 400);
+      }
+      
+      const query1 = 'SELECT * FROM paylist WHERE publicid = ?';
+      const res1: any = await c.env.DB.prepare(query1).bind("758805").all();
+      
+      const query2 = 'SELECT * FROM typepays WHERE publicid = ?';
+      const res2: any = await c.env.DB.prepare(query2).bind("758805").all();
+      
+      if (!res1 || !res1.results[0] || !res2 || !res2.results[0]) {
+        return c.json({ success: false, error: 'Data not found' }, 400);
+      }
+
+      let message = "";
+      for (const item of res1.results) {
+        if (item.payname === "paypal" || item.payname === "wise") {
+          message += encodeURIComponent(item.payurl);
+        }
+      }
+
+      const setupArr = [];
+      
+      // 💡 改用 for...of 迴圈取代 forEach，確保非同步與執行順序穩定
+      for (const item1 of res2.results) {
+        if (item1.typename === "donate") {
+          setupArr.push({
+            value: "donate",
+            name: "捐赠",
+            equity: item1.content ? item1.content.split(";") : [],
+            price: item1.price ? item1.price.split(";") : [],
+            paylist: [...res1.results]
+          });
+        } else if (item1.typename === "subscription") {
+          setupArr.push({
+            value: "subscription",
+            name: "订阅",
+            equity: item1.content ? item1.content.split(";") : [],
+            price: item1.price ? item1.price.split(";") : [],
+            paylist: [...res1.results]
+          });
+        } else if (item1.typename === "lifetime") {
+          setupArr.push({
+            value: "lifetime",
+            name: "终身",
+            equity: item1.content ? item1.content.split(";") : [],
+            price: item1.price ? item1.price.split(";") : [],
+            paylist: [...res1.results]
+          });
+        }
+      }
+
+      // 迴圈跑完後統一加密並回傳 Response
+      const publicKeyPem = res.results[0].public_keyE as string;
+      const encrypted = await encryptflare(publicKeyPem, message);
+      
+      return c.json({
+        success: true, 
+        encrypted: encrypted,
+        setupArr: setupArr
+      });
+
+    } else {
+      return c.json({ success: false, error: 'System keys missing' }, 400);
+    }    
+  } catch (err: any) {
+    console.log(err);
     return c.json({ 
       success: false, 
       error: err.message || 'Internal Server Error' 
-    }, 500)
+    }, 500);
   }
-})
+});
 // 用戶登入 (核發 JWT)
 app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, async (c) => {
   try{  
@@ -1409,9 +1421,12 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       types: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
+    //const res1 = await c.env.DB.prepare(
+    //    'SELECT * FROM ADlink WHERE publicid = ? ORDER BY created_at DESC'
+    //).bind("758805").all();    
     const res1 = await c.env.DB.prepare(
-        'SELECT * FROM ADlink WHERE publicid = ? ORDER BY created_at DESC'
-    ).bind("758805").all();    
+      'SELECT * FROM ADlink ORDER BY created_at DESC'
+    ).all()
     const res2 = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
@@ -1556,9 +1571,9 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
 //管理端增删改adlink
 app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware, async (c)=>{
     try{
-      const user = c.get('jwtPayload')
+      const user = c.get('jwtPayload');
       const usernum = c.get('usernum')
-      const message=c.get("message")
+      const message=c.get("message");console.log(message)
       const adminobj: any = await c.env.DB.prepare(
         'SELECT * FROM admin WHERE adminname = ?'
       )
@@ -1566,13 +1581,13 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
       if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
       const res = await c.env.DB.prepare(
           'SELECT * FROM ADlink WHERE urlId = ?'
-      ).bind(message.split("(ASD)")[1]).first();
+      ).bind(message.split("(ASD)")[3]).first();
       if(!res||!res.urlId){  
         if(message.split("(ASD)")[0]==="add"){
           const result = await c.env.DB.prepare(
-            'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime,publicid) VALUES (?,?,?,?,?,?,?,?)'
+            'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime) VALUES (?,?,?,?,?,?,?)'
           )
-          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[7],"758805")
+          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],decodeURIComponent(message.split("(ASD)")[3]),message.split("(ASD)")[4],decodeURIComponent(message.split("(ASD)")[5]),encodeURIComponent(message.split("(ASD)")[6]),message.split("(ASD)")[7])
           .run()
           return c.json({ 
             success: true, 
@@ -1593,7 +1608,7 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
           const result = await c.env.DB.prepare(
             'UPDATE ADlink SET title = ?,xuhao = ?,postname = ?,linkUrl = ?,expritime = ? WHERE urlId = ?'
           )
-          .bind(message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[7],message.split("(ASD)")[1])
+          .bind(message.split("(ASD)")[3],message.split("(ASD)")[4],message.split("(ASD)")[5],message.split("(ASD)")[6],message.split("(ASD)")[7],message.split("(ASD)")[2])
           .run()
           return c.json({ 
             success: true, 
@@ -1668,7 +1683,7 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
   try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const message=c.get("message")
+    const message=c.get("message");console.log(message)
     const adminobj: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
@@ -1701,7 +1716,7 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
       }
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE custcode SET codeimg ? WHERE codename = ?'
+          'UPDATE custcode SET codeimg = ? WHERE codename = ?'
         )
         .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
         .run()
@@ -1790,7 +1805,7 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
     if(!res||!res.payimg){  
       if(message.split("(ASD)")[0]==="add"){
         const result = await c.env.DB.prepare(
-          'INSERT INTO paylist (payname,payimg,payurl,publicid) VALUES (?,?,?,?,?)'
+          'INSERT INTO paylist (payname,payimg,payurl,publicid) VALUES (?,?,?,?)'
         )
         .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],message.split("(ASD)")[3],"758805")
         .run()

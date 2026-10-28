@@ -38,7 +38,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
     c.set('usernum', meObj.username);
     c.set('password', meObj.password?meObj.password:"");
     c.set('token', meObj.token?meObj.token:"");
-    c.set('message', meObj.message?meObj.message:"");
+    c.set('message', meObj.message?meObj.message+"(ASD)"+body.message:"");
 
     // 驗證通過，繼續執行下一個中間件或 API 路由
     return await next();
