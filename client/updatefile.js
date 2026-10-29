@@ -855,7 +855,6 @@ async function nextpost(publicKeyF,privateKeyE){
                             custcodeobj.codeimg=`${serverUrl}/files/${item11.file_key}`;
                         }
                         if((index11+1)===items.length){
-                            alert(JSON.stringify(custcodeobj))
                             if(!custcodeobj.codename||!custcodeobj.codeimg)return alert("信息未填全");
                             const pathurl="/api/protected/adddelrest_code";
                             const requestData={
@@ -920,26 +919,28 @@ async function nextpost(publicKeyF,privateKeyE){
                     ||reg.test(item.querySelector("div:nth-child(3)>input").value)
                     )return alert("文本不安全");
                     proaccountObj.proname=item.querySelector("div:nth-child(1)>select").value;
-                    items.some((itm)=>{
+                    items.forEach(async (itm,indx)=>{
                         if(itm.content===proaccountObj.proname){
                             item.querySelector("div:nth-child(2)>input").value=`${serverUrl}/files/${itm.file_key}`;
                             proaccountObj.proimg=`${serverUrl}/files/${itm.file_key}`;
                         }
+                        if((indx+1)===items.length){
+                            if(!proaccountObj.proname||!proaccountObj.proimg||!proaccountObj.prourl)return alert("信息未填全")
+                            const pathurl="/api/protected/adddelrest_account";
+                            const requestData={
+                                username:JSON.parse(usernum).username,
+                                password:"",
+                                token:"",
+                                message:typepost+"(ASD)"+proaccountObj.proname+"(ASD)"+proaccountObj.proimg+"(ASD)"+proaccountObj.prourl,
+                                nonce:""
+                            };
+                            const nonce11 = generateRandom6Digits(); 
+                            requestData.nonce=nonce11;
+                            const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                            const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                        }
                     })
-                    if(!proaccountObj.proname||!proaccountObj.proimg||!proaccountObj.prourl)return alert("信息未填全")
-                    const pathurl="/api/protected/adddelrest_account";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:typepost+"(ASD)"+proaccountObj.proname+"(ASD)"+proaccountObj.proimg+"(ASD)"+proaccountObj.prourl,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
                 }
                 item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
@@ -988,26 +989,28 @@ async function nextpost(publicKeyF,privateKeyE){
                     ||reg.test(item.querySelector("div:nth-child(3)>input").value)
                     )return alert("文本不安全");
                     payobj.payname=item.querySelector("div:nth-child(1)>select").value;
-                    items.some((itm)=>{
+                    items.forEach(async (itm,indx)=>{
                         if(itm.content===payobj.payname){
                             item.querySelector("div:nth-child(2)>input").value=`${serverUrl}/files/${itm.file_key}`;
                             payobj.payimg=`${serverUrl}/files/${itm.file_key}`;
                         }
+                        if((indx+1)===items.length){
+                            if(!payobj.payname||!payobj.payimg||!payobj.payurl)return alert("信息未填全")
+                            const pathurl="/api/protected/adddelrest_pay";
+                            const requestData={
+                                username:JSON.parse(usernum).username,
+                                password:"",
+                                token:"",
+                                message:typepost+"(ASD)"+payobj.payname+"(ASD)"+payobj.payimg+"(ASD)"+payobj.payurl,
+                                nonce:""
+                            };
+                            const nonce11 = generateRandom6Digits(); 
+                            requestData.nonce=nonce11;
+                            const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                            const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                        }
                     })
-                    if(!payobj.payname||!payobj.payimg||!payobj.payurl)return alert("信息未填全")
-                    const pathurl="/api/protected/adddelrest_pay";
-                    const requestData={
-                        username:JSON.parse(usernum).username,
-                        password:"",
-                        token:"",
-                        message:typepost+"(ASD)"+payobj.payname+"(ASD)"+payobj.payimg+"(ASD)"+payobj.payurl,
-                        nonce:""
-                    };
-                    const nonce11 = generateRandom6Digits(); 
-                    requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
                 }
                 item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
                     e.stopPropagation();
