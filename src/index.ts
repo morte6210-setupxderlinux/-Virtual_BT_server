@@ -338,7 +338,7 @@ async function addadminname(db: D1Database){
   .run()
   return result
 }
-// 用一個全域變數確保在同一個 Worker 生命週期中只執行一次初始化
+// 用一個全域變數確保在同一個 Worker 生命週期中只執行一次初始化17369622758
 let isInitialized = false;
 // 利用 Hono 的全域 Middleware，在收到第一個請求時自動觸發初始化（若尚未執行）
 app.use('*', async (c, next) => {
@@ -524,7 +524,7 @@ async function addsignkey(db: D1Database,userId: Number,message: string){
     const adminlist: any = await db.prepare(
         'SELECT * FROM admin WHERE publicid = ?'
     ).bind('758805').first();
-    if(!adminlist||adminlist.adminname!=="17369622758")return null
+    if(!adminlist||adminlist.adminname!==adminconfig.adminname)return null
     const plantext=await decryptflare(privateKeyPem1,adminlist.password);
     if(!plantext)return null
     const password_base=btoa(plantext);
