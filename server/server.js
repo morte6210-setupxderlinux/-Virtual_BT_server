@@ -7,15 +7,15 @@ const path=require("path");
 const app = express();
 app.use(express.json());
 // 目標 Cloudflare Workers API 網址
-const CLOUDFLARE_API_URL = 'http://127.0.0.1:8787';
+const CLOUDFLARE_API_URL = 'http://127.0.0.1:8787';//换成你的Cloudflare生成的真实网址
 //注册
-async function register1(){
+async function register(){
   try {
     const requestBody = {
-      username: "setupxderlinux@gmail.com",
-      password:"189186210ERf",
+      username: "setupxderlinux@gmail.com",//应该由设备端代码写入
+      password:"189186210ERf",//应该由设备端代码写入
       message:"",
-      UUID:"87494ghhvvxfe87766935",
+      UUID:"87494ghhvvxfe87766935",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
       nonce:""
     };
     const nonce = crypto.randomUUID(); // 隨機數
@@ -23,73 +23,28 @@ async function register1(){
     const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
     const URL=CLOUDFLARE_API_URL+"/api/auth/userregister";
     const token="";
-    const UUID="uncvtrufhfru854378ufbvfe549jfnmcnvbgfettotibvddfweri";
+    const UUID="uncvtrufhfru854378ufbvfe549jfnmcnvbgfettotibvddfweri";//被截取的设备UUID剩余的
     const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
     const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
     const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
-    console.log(result);//{success:true,userId:""}
-
+    console.log(result);
+    if(result.success&&result.cloudflareResponse.success&&result.cloudflareResponse.userId){
+      //result.cloudflareResponse.userId是注册成功的用户Id
+    }
   } catch (err) {
     console.error('請求 Cloudflare 失敗:', err.message); 
   }
-};//register1()
-async function register2(){
-  try {
-    const requestBody = {
-      username: "morte6210@gmail.com",
-      password:"189186210ERf",
-      message:"",
-      UUID:"yuefuuikfmncyirrn6899ugfdj",
-      nonce:""
-    };
-    const nonce = crypto.randomUUID(); // 隨機數
-    requestBody.nonce=nonce;
-    const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
-    const URL=CLOUDFLARE_API_URL+"/api/auth/userregister";
-    const token="";
-    const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";
-    const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
-    const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
-    const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
-    console.log(result);//{success:true,userId:""}
+};//register()
 
-  } catch (err) {
-    console.error('請求 Cloudflare 失敗:', err.message); 
-  }
-};//register2();
-async function register3(){
-  try {
-    const requestBody = {
-      username: "18918656257",
-      password:"189186210ERf",
-      message:"",
-      UUID:"iuirofkcgfy65645tvkxj76372",
-      nonce:""
-    };
-    const nonce = crypto.randomUUID(); // 隨機數
-    requestBody.nonce=nonce;
-    const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
-    const URL=CLOUDFLARE_API_URL+"/api/auth/userregister";
-    const token="";
-    const UUID="767948hugxttyydsbbvuy7tjfkjdf902wkemcncbzbdry040hvvogg";
-    const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
-    const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
-    const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
-    console.log(result);//{success:true,userId:""}
-
-  } catch (err) {
-    console.error('請求 Cloudflare 失敗:', err.message); 
-  }
-};//register3();
 
 //登录 
 async function userlogin(){
   try {
       const requestBody = {
-        username: "morte6210@gmail.com",
-        password:"189186210ERf",
+        username: "morte6210@gmail.com",//应该由设备端代码写入
+        password:"189186210ERf",//应该由设备端代码写入
         message:"",
-        UUID:"yuefuuikfmncyirrn6899ugfdj",
+        UUID:"yuefuuikfmncyirrn6899ugfdj",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
         nonce:""
       };
       const nonce = crypto.randomUUID(); // 隨機數
@@ -97,7 +52,7 @@ async function userlogin(){
       const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
       const URL=CLOUDFLARE_API_URL+"/api/auth/userlogin";
       const token="";
-    const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";
+    const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";//被截取的设备UUID剩余的
     const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
     const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
     const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
@@ -114,14 +69,14 @@ async function userlogin(){
       
     }
 };//userlogin();
-//密钥
+//获取公共密钥
 async function findkey(){
   try {
     const nonce = crypto.randomUUID(); // 隨機數
     const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
     const URL=CLOUDFLARE_API_URL+"/api/public/findkey";
     const result=await postserver(URL,nonce,timestamp,"","","","");
-    console.log(result);//{success:true,data:{}}
+    console.log(result);
       if(result.success&&result.cloudflareResponse.data.public_keyF&&result.cloudflareResponse.data.private_keyE){
         fs.writeFileSync(path.join(__dirname,"./key/publicKeyF.pem"),result.cloudflareResponse.data.public_keyF,(err)=>{console.log(err)})
         fs.writeFileSync(path.join(__dirname,"./key/privateKeyE.pem"),result.cloudflareResponse.data.private_keyE,(err)=>{console.log(err)})
@@ -138,7 +93,7 @@ async function usersign(){
         username: "morte6210@gmail.com",
         password:"",
         message:"",
-        UUID:"yuefuuikfmncyirrn6899ugfdj",
+        UUID:"yuefuuikfmncyirrn6899ugfdj",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
         nonce:""
       };
       const nonce = crypto.randomUUID(); // 隨機數
@@ -146,7 +101,7 @@ async function usersign(){
       const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
       const URL=CLOUDFLARE_API_URL+"/api/protected/device/useraddkey";
       const token=fs.readFileSync(path.join(__dirname,"./key/token.pem"),"utf-8");
-      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";
+      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";//被截取的设备UUID剩余的
       const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
       const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
       const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
@@ -164,10 +119,10 @@ async function usersign(){
 async function findsign(){
   try {
       const requestBody = {
-        username: "morte6210@gmail.com",
+        username: "morte6210@gmail.com",//应该由设备端代码写入
         password:"",
         message:"",
-        UUID:"yuefuuikfmncyirrn6899ugfdj",
+        UUID:"yuefuuikfmncyirrn6899ugfdj",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
         nonce:""
       };
       const nonce = crypto.randomUUID(); // 隨機數
@@ -175,7 +130,7 @@ async function findsign(){
       const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
       const URL=CLOUDFLARE_API_URL+"/api/protected/device/findsign";
       const token=fs.readFileSync(path.join(__dirname,"./key/token.pem"),"utf-8");
-      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";
+      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";//被截取的设备UUID剩余的
       const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
       const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
       const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
@@ -202,7 +157,7 @@ async function findlink(){
         username: "morte6210@gmail.com",
         password:"",
         message:"",
-        UUID:"yuefuuikfmncyirrn6899ugfdj",
+        UUID:"yuefuuikfmncyirrn6899ugfdj",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
         nonce:""
       };
       const nonce = crypto.randomUUID(); // 隨機數
@@ -210,7 +165,7 @@ async function findlink(){
       const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
       const URL=CLOUDFLARE_API_URL+"/api/protected/device/findlink";
       const token=fs.readFileSync(path.join(__dirname,"./key/token.pem"),"utf-8");
-      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";
+      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";//被截取的设备UUID剩余的
       const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
       const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
       const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);

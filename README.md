@@ -18,14 +18,15 @@
 ### 前置需求
 * **Node.js**: `v18.0.0` 或以上版本
 * **npm** / **pnpm** 包管理器
+* **git**
 * **Cloudflare 帳號**（需開啟 Cloudflare Workers 與 D1 功能）
 
 ### 下載與安裝依賴
 
 1. 克隆/下載專案程式碼至本地：
    ```bash
-   git clone <your-repository-url>
-   cd <project-directory>
+   git clone https://github.com/morte6210-setupxderlinux/-Virtual_BT_server.git
+   cd ./-Virtual_BT_server
    ```
 
 2. 安裝專案所需的依賴套件：
@@ -73,6 +74,12 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
 CREATE TABLE IF NOT EXISTS request_nonces (
   nonce TEXT PRIMARY KEY,
   created_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS ip_rate_limits (
+  ip TEXT PRIMARY KEY,
+  request_count INTEGER NOT NULL,
+  window_start INTEGER NOT NULL,
+  blocked_until INTEGER DEFAULT 0
 );
 "
 ```

@@ -5,13 +5,13 @@ compatibility_date = "2026-10-12"
 # 綁定 D1 資料庫
 [[d1_databases]]
 binding = "DB"
-database_name = "mortenam" # 替換為 your name
+database_name = "mortenam" # 替換為你的名称
 database_id = "d0aead85-1b5a-42e5-b3d9-cc1c63c3a92e" # 替換為 d1 create 輸出的 ID
 
 # 綁定 R2 存儲桶
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "picbox" 替換為 your name
+bucket_name = "picbox" # 替換為你的名称
 
 [vars]
 JWT_SECRET = "kf892holmbrrueue63753"  # 可以換成你自己的任意字串
