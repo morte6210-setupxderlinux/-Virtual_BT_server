@@ -1,6 +1,6 @@
 # Cloudflare Worker & Hono 專案部署與開發指南
 
-本專案基於 **Node.js**、**Hono 框架** 與 **Cloudflare Workers** 構建，提供了安全的 API 服務、設備 UUID 驗證、配置IP篩選機制 、RSA-OAEP 非對稱加密以及 D1\R2 資料庫操作。server下的檔案開發裝置端與伺服器串接時參考，在專案佈署時會被忽略。 
+本專案基於 **Node.js**、**Hono 框架** 與 **Cloudflare Workers** 構建，提供了安全的 API 服務、設備 UUID 驗證、配置IP篩選機制 、RSA-OAEP 非對稱加密以及 D1\R2 資料庫操作。server下的檔案，開發裝置端與伺服器串接時參考，專案佈署時會被忽略。 
 
 ---
 
@@ -47,7 +47,7 @@ npx wrangler login
 ```
 
 ### 2.2 配置 `wrangler.toml`
-確保專案根目錄下的 `wrangler.toml` 包含正確的配置與 D1 資料庫綁定
+確保專案根目錄下的 `wrangler.toml` 包含正確的配置與 D1/R2資料庫綁定
 
 ### 2.3 初始化 D1 資料庫結構
 如果尚未建立資料庫表格，請執行以下 SQL 初始化設定：
