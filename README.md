@@ -34,7 +34,7 @@
    npm install
    ```
 
-3. 修改**client**底下**config.js**檔案裡的**URL**為**Cloudflare**給你的實際網址；修改**src**底下**config.js**檔案裡的管理員帳號和密碼為你的。 
+3. 修改**client**底下**config.js**檔案裡的**URL**為**Cloudflare**給你的實際網址；修改**src**底下**config.js**檔案裡的管理員帳號和密碼為你的。你需要先上傳專案取得連結，修改完之後再重新上傳一次。
 
 ---
 
