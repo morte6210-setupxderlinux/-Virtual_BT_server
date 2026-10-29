@@ -33,9 +33,8 @@
    ```bash
    npm install
    ```
-   
-3. 修改client下的config.js档案里的URL为cloudflare给你的实际网址；修改src下的config.js档案里的管理员账户与密码为你的；
 
+3. 修改**client**底下**config.js**檔案裡的**URL**為**Cloudflare**給你的實際網址；修改**src**底下**config.js**檔案裡的管理員帳號和密碼為你的。 
 
 ---
 
