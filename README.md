@@ -1,6 +1,6 @@
 # Cloudflare Worker & Hono 專案部署與開發指南
 
-本專案基於 **Node.js**、**Hono 框架** 與 **Cloudflare Workers** 構建，提供了安全的 API 服務、設備 UUID 驗證、RSA-OAEP 非對稱加密以及 D1 資料庫操作。
+本專案基於 **Node.js**、**Hono 框架** 與 **Cloudflare Workers** 構建，提供了安全的 API 服務、設備 UUID 驗證、配置IP篩選機制 、RSA-OAEP 非對稱加密以及 D1\R2 資料庫操作。server下的檔案開發裝置端與伺服器串接時參考，在專案佈署時會被忽略。 
 
 ---
 
@@ -45,19 +45,7 @@ npx wrangler login
 ```
 
 ### 2.2 配置 `wrangler.toml`
-確保專案根目錄下的 `wrangler.toml` 包含正確的配置與 D1 資料庫綁定：
-
-```toml
-name = "cf-backend"
-main = "src/index.ts"
-compatibility_date = "2024-01-01"
-
-# D1 資料庫綁定 (請更換為你的 d1 database_id)
-[[d1_databases]]
-binding = "DB"
-database_name = "device_db"
-database_id = "your-d1-database-id-here"
-```
+確保專案根目錄下的 `wrangler.toml` 包含正確的配置與 D1 資料庫綁定
 
 ### 2.3 初始化 D1 資料庫結構
 如果尚未建立資料庫表格，請執行以下 SQL 初始化設定：
@@ -94,20 +82,6 @@ CREATE TABLE IF NOT EXISTS ip_rate_limits (
 ```bash
 npm run cf-typegen
 ```
-
-在 TypeScript 程式碼中（例如 `src/index.ts`），帶入泛型綁定：
-
-```typescript
-import { Hono } from 'hono'
-
-// 使用自動生成的 CloudflareBindings
-const app = new Hono<{ Bindings: CloudflareBindings }>()
-
-app.get('/', (c) => c.text('Cloudflare Worker API Running!'))
-
-export default app
-```
-
 ### 3.2 啟動本地開發伺服器
 執行以下命令啟動本地模擬環境（支援 D1 本地資料庫與熱重載）：
 
@@ -136,6 +110,12 @@ CREATE TABLE IF NOT EXISTS device_rate_limits (
 CREATE TABLE IF NOT EXISTS request_nonces (
   nonce TEXT PRIMARY KEY,
   created_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS ip_rate_limits (
+  ip TEXT PRIMARY KEY,
+  request_count INTEGER NOT NULL,
+  window_start INTEGER NOT NULL,
+  blocked_until INTEGER DEFAULT 0
 );
 "
 ```

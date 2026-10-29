@@ -16,3 +16,8 @@ bucket_name = "picbox" # 替換為你的名称
 [vars]
 JWT_SECRET = "kf892holmbrrueue63753"  # 可以換成你自己的任意字串
 TURNSTILE_SECRET_KEY = "845hjhvRTRuf456734hbvtr" # 可以換成你自己的任意字串
+
+# 配置靜態資產目錄
+[assets]
+directory = "./client"
+binding = "ASSETS"
