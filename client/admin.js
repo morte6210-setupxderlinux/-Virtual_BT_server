@@ -80,8 +80,7 @@ function nextpost(publicKeyF,privateKeyE){
                         }).catch(err=>{
                             resolve(err+"1122");
                         })
-                    })
-                        
+                    })   
                 }
                 const nonce1 = generateRandom6Digits();
                 const timestamp1 = Math.floor(Date.now() / 1000).toString(); 
@@ -110,7 +109,7 @@ function nextpost(publicKeyF,privateKeyE){
                         document.querySelector(".main>div:nth-child(2)>input").value="";
                         document.querySelector(".main>div:nth-child(3)>input").value="";
                         document.querySelector(".main>div:nth-child(4)>input").value="";
-                        window.location.href=clientUrl+"/updatefile?token="+encodeURIComponent(data.token)+"&username="+encodeURIComponent(encrypted2);
+                        window.location.href=clientUrl+"/updatefile?username="+encodeURIComponent(encrypted2);
                     }
                 }).catch(err=>{
                     console.log(err+"1122");

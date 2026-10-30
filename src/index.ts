@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { jwt, sign } from 'hono/jwt'
 import {cors} from "hono/cors"
+import {getCookie} from "hono/cookie"
 import { securityMiddleware } from './securityMiddleware'
 import { authMiddleware } from './authMiddleware'; 
 import {deviceSecurityMiddleware} from './deviceSecurityMiddleware';
@@ -936,7 +937,7 @@ app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, 
     const payload = {
       id: user.id,
       username: user.username,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 2 // 2 hours
     }
     const token = await sign(payload, c.env.JWT_SECRET);
     const sysKeys: any = await c.env.DB.prepare(
@@ -988,14 +989,13 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     const payload = {
       id: user.id,
       username: user.adminname,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 // 24 hours
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 2 // 2 hours
     }
     const token = await sign(payload, c.env.JWT_SECRET);
-    const publicKeyPem = sysKeys.public_keyE as string;
-    const encrypted=await encryptflare(publicKeyPem,token);
+    // 設定 token，有效時間為 2 小時 (7200 秒)
+    c.header('Set-Cookie', `token=${token}; HttpOnly; Path=/; Max-Age=7200; Secure; SameSite=Strict`);
     return c.json({
       success: true,
-      token:encrypted,
       adminname: user.adminname
     })
   } catch (err: any) {
@@ -1006,6 +1006,7 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
     }, 500)
   }
 })
+
 // 透過 /files/:key 讀取 R2 中的檔案
 app.get('/files/*', async (c) => {
   try {
@@ -1037,7 +1038,17 @@ app.get('/files/*', async (c) => {
 // 2. 註冊 JWT 鑑權中間件 (保護所有以 /api/protected/* 開頭的路由)
 // ----------------------------------------------------
 app.use('/api/protected/*', (c, next) => {
-  
+  // 1. 優先從 Cookie 拿，沒有的話再從 Authorization 拿
+  let token = getCookie(c, 'token') || c.req.header('Authorization');
+
+  // 2. 如果是從 Authorization 拿到的，可能包含 "Bearer " 字串，保險起見可以清一下或直接帶入
+  if (token && token.startsWith('Bearer ')) {
+    token = token.split(' ')[1];
+  }
+  if (token) {
+    // 3. 塞回 houno/jwt 預期接收的標準格式
+    c.req.raw.headers.set('Authorization', `Bearer ${token}`);
+  }
   const jwtMiddleware = jwt({
     secret: c.env.JWT_SECRET,
     alg:"HS256"
@@ -1048,7 +1059,7 @@ app.use('/api/protected/*', (c, next) => {
 // 3. 受保護路由 (Protected Routes)
 // ----------------------------------------------------
 // 獲取目前登入用戶個人資訊
-app.post('/api/protected/me', (c) => {
+app.post('/api/protected/adminme', securityMiddleware, (c) => {
   // 從 JWT 解析結果中獲取當前用戶 Payload
   const payload = c.get('jwtPayload');
   return c.json({
@@ -1130,7 +1141,27 @@ app.post("/api/protected/sign", securityMiddleware, authMiddleware, async (c)=>{
     }, 500)
   }  
 })*/
-
+// 管理员登出 (清除 JWT token)
+app.post('/api/protected/loginout', securityMiddleware, authMiddleware, async (c) => {
+  try{  
+    const admin = c.get('jwtPayload')
+    const usernum = c.get('usernum');
+    if(!usernum||usernum!==admin.username)return c.json({ error: 'Invalid username' },401)
+    
+    // 將 Max-Age 設為 0，讓瀏覽器立刻刪除該 Cookie
+    c.header('Set-Cookie', 'token=; HttpOnly; Path=/; Max-Age=0; Secure; SameSite=Strict');
+    return c.json({
+      success: true,
+      adminname: admin.username
+    })
+  } catch (err: any) {
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
 //用户产生与获取解禁码
 app.post("/api/protected/device/opensign", deviceSecurityMiddleware, deviceauthMiddleware, async (c)=>{
   try{  

@@ -63,7 +63,7 @@ export const securityMiddleware = async (c: Context, next: Next) => {
     const reqTimestamp = parseInt(timestampHeader, 10);
     
     // 時間校驗：如果請求時間與伺服器時間相差超過 90 秒，直接拒絕（防止表被清空後舊請求又拿來重放）
-    if (isNaN(reqTimestamp) || Math.abs(now - reqTimestamp) > 90) {
+    if (isNaN(reqTimestamp) || Math.abs(now - reqTimestamp) > 5*60) {
       return c.json({ success: false, error: 'Request expired or invalid timestamp.' }, 403);
     }
 

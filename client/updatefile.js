@@ -2,9 +2,8 @@ const clientUrl=config.clientUrl;
 const serverUrl=config.serverUrl;
 const imgUrl=config.imgUrl;
 const urlParams = new URLSearchParams(window.location.search);
-const token=decodeURIComponent(urlParams.get('token'))||"";
 const username=decodeURIComponent(urlParams.get('username'))||"";
-if(!token||!username)window.location.href=clientUrl+"/admin";
+if(!username)window.location.href=clientUrl+"/admin";
 const nonce = generateRandom6Digits(); // 隨機數
 const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
 
@@ -27,13 +26,15 @@ fetch(serverUrl+"/api/public/findkey",{
 })
 
 async function nextpost(publicKeyF,privateKeyE){
-    const custtoken=await decryptflare(privateKeyE,token);
     const usernum=await decryptflare(privateKeyE,username);
-    fetch(serverUrl+"/api/protected/me",{
+    const nonce0 = generateRandom6Digits(); // 隨機數
+    const timestamp0 = Math.floor(Date.now() / 1000).toString();
+    fetch(serverUrl+"/api/protected/adminme",{
         method:"POST",
         headers:{
             "Content-Type":"application/json",
-            "Authorization":`Bearer ${custtoken}`
+            'x-request-nonce': nonce0,
+            'x-request-timestamp': timestamp0,
         }
     }).then(response=>{
         if(!response.ok){
@@ -62,6 +63,37 @@ async function nextpost(publicKeyF,privateKeyE){
             document.querySelector(".main>.buttab3").style.display="flex";
             nextsetup()
         }
+        document.querySelector(".buttop>button:nth-child(3)").onclick=async function(e){
+            const nonce01 = generateRandom6Digits(); // 隨機數
+            const timestamp01 = Math.floor(Date.now() / 1000).toString();
+            const requestData={
+                username:JSON.parse(usernum).username,
+                password:"",
+                token:"",
+                message:"",
+                nonce:nonce01
+            };
+            const encrypted01=await encryptflare(publicKeyF,JSON.stringify(requestData));
+            fetch(serverUrl+"/api/protected/loginout",{
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json",
+                    'x-request-nonce': nonce01,
+                    'x-request-timestamp': timestamp01,
+                },
+                body:JSON.stringify({encrypted:encrypted01})
+            }).then(response=>{
+                if(!response.ok){
+                    throw new Error(`HTTP 错误！状态码：${response.status}`)
+                }
+                return response.json();
+            }).then(data=>{
+                if(data.success&&data.adminname===JSON.parse(usernum).username)window.location.href=clientUrl+"/admin";
+            }).catch(err=>{
+                console.log(err);
+                window.location.href=clientUrl+"/admin";
+            })
+        }
     }).catch(err=>{
         console.log(err);
         window.location.href=clientUrl+"/admin";
@@ -85,7 +117,6 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce1,
                 'x-request-timestamp': timestamp1,
-                "Authorization":`Bearer ${custtoken}`
             },
             body:JSON.stringify({encrypted:encrypted10})
         }).then(response=>{
@@ -126,7 +157,6 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce1,
                 'x-request-timestamp': timestamp1,
-                "Authorization":`Bearer ${custtoken}`
             },
             body:JSON.stringify({encrypted:encrypted10})
         }).then(response=>{
@@ -1223,7 +1253,6 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce0,
                 'x-request-timestamp': timestamp0,
-                "Authorization":`Bearer ${custtoken}`
             },
             body:JSON.stringify({encrypted:encrypted0,message:message})
         }).then(response=>{
@@ -1256,7 +1285,6 @@ async function nextpost(publicKeyF,privateKeyE){
                 headers:{
                     'x-request-nonce': nonce2,
                     'x-request-timestamp': timestamp2,
-                    "Authorization":`Bearer ${custtoken}`
                 },
                 body: formData // 不要手動設定 Content-Type，瀏覽器會自動處理 multipart/form-data
             });
