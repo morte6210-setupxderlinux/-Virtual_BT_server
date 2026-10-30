@@ -109,7 +109,7 @@ function nextpost(publicKeyF,privateKeyE){
                         document.querySelector(".main>div:nth-child(2)>input").value="";
                         document.querySelector(".main>div:nth-child(3)>input").value="";
                         document.querySelector(".main>div:nth-child(4)>input").value="";
-                        window.location.href=clientUrl+"/updatefile?username="+encodeURIComponent(encrypted2);
+                        window.location.href=clientUrl+"/updatefile?username="+encodeURIComponent(encrypted2)+"&token="+encodeURIComponent(data.token);
                     }
                 }).catch(err=>{
                     console.log(err+"1122");

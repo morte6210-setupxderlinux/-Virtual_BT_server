@@ -3,7 +3,8 @@ const serverUrl=config.serverUrl;
 const imgUrl=config.imgUrl;
 const urlParams = new URLSearchParams(window.location.search);
 const username=decodeURIComponent(urlParams.get('username'))||"";
-if(!username)window.location.href=clientUrl+"/admin";
+const token=decodeURIComponent(urlParams.get('token'))||"";
+if(!username||!token)window.location.href=clientUrl+"/admin";
 const nonce = generateRandom6Digits(); // 隨機數
 const timestamp = Math.floor(Date.now() / 1000).toString(); // 秒級時間戳
 
@@ -27,6 +28,7 @@ fetch(serverUrl+"/api/public/findkey",{
 
 async function nextpost(publicKeyF,privateKeyE){
     const usernum=await decryptflare(privateKeyE,username);
+    const custtoken=await decryptflare(privateKeyE,token);
     const nonce0 = generateRandom6Digits(); // 隨機數
     const timestamp0 = Math.floor(Date.now() / 1000).toString();
     fetch(serverUrl+"/api/protected/adminme",{
@@ -35,6 +37,7 @@ async function nextpost(publicKeyF,privateKeyE){
             "Content-Type":"application/json",
             'x-request-nonce': nonce0,
             'x-request-timestamp': timestamp0,
+            'Authorization': `Bearer ${custtoken}`,
         }
     }).then(response=>{
         if(!response.ok){
@@ -80,6 +83,7 @@ async function nextpost(publicKeyF,privateKeyE){
                     "Content-Type":"application/json",
                     'x-request-nonce': nonce01,
                     'x-request-timestamp': timestamp01,
+                    'Authorization': `Bearer ${custtoken}`,
                 },
                 body:JSON.stringify({encrypted:encrypted01})
             }).then(response=>{
@@ -94,7 +98,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 window.location.href=clientUrl+"/admin";
             })
         }
-    }).catch(err=>{
+    }).catch(err=>{alert(JSON.stringify(err))
         console.log(err);
         window.location.href=clientUrl+"/admin";
     })
@@ -117,6 +121,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce1,
                 'x-request-timestamp': timestamp1,
+                'Authorization': `Bearer ${custtoken}`,
             },
             body:JSON.stringify({encrypted:encrypted10})
         }).then(response=>{
@@ -157,6 +162,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce1,
                 'x-request-timestamp': timestamp1,
+                'Authorization': `Bearer ${custtoken}`,
             },
             body:JSON.stringify({encrypted:encrypted10})
         }).then(response=>{
@@ -185,10 +191,13 @@ async function nextpost(publicKeyF,privateKeyE){
                         html7+=`
                             <option value="${item.username}">${item.username}</option>
                         `;
+                        let date=new Date(item.token_time*1000);
+                        let dateString=date.toISOString().split('T')[0];
                         html10+=`
                             <li>
                                 <div><p>账户：</p><input type="text" value="${item.username}" disabled></div>
-                                <div><p>状态：</p><select disabled><option value="yes">yes</option><option value="no">no</option></select></div>
+                                <div><p>权限：</p><select disabled><option value="yes">yes</option><option value="no">no</option></select></div>
+                                <div><p>有效期：</p><input type="text" value="${dateString}" disabled></div>
                                 <div><button>修改</button><button>保存</button></div>
                             </li>
                         `;
@@ -222,7 +231,7 @@ async function nextpost(publicKeyF,privateKeyE){
                             <div><p>序号：</p><input type="text" value="" disabled></div>
                             <div><p>机构：</p><input type="text" value="" disabled></div>
                             <div><p>外链：</p><input type="text" value="" disabled></div>
-                            <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="" disabled></div>
+                            <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" value="" disabled></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
@@ -239,7 +248,7 @@ async function nextpost(publicKeyF,privateKeyE){
                                 <div><p>序号：</p><input type="text" value="${item.xuhao}" disabled></div>
                                 <div><p>机构：</p><input type="text" value="${item.postname}" disabled></div>
                                 <div><p>外链：</p><input type="text" value="${item.linkUrl}" disabled></div>
-                                <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="${item.expritime}" disabled></div>
+                                <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" value="${item.expritime}" disabled></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -395,7 +404,7 @@ async function nextpost(publicKeyF,privateKeyE){
                         <li>
                             <div><p>归属：</p><select disabled></select></div>
                             <div><p>账户类别：</p><select disabled></select></div>
-                            <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" disabled></div>
+                            <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" disabled></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
@@ -409,7 +418,7 @@ async function nextpost(publicKeyF,privateKeyE){
                             <li>
                                 <div><p>归属：</p><select disabled></select></div>
                                 <div><p>账户类别：</p><select disabled></select></div>
-                                <div><p>有效期：</p><input placeholder="举例：2027-12-30" type="text" value="${item.expires}" disabled></div>
+                                <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" value="${item.expires}" disabled></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -434,8 +443,8 @@ async function nextpost(publicKeyF,privateKeyE){
                     html9=`
                         <li>
                             <div><p>类别：</p><select disabled></select></div>
-                            <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
-                            <div><p>价格：</p><textarea placeholder="每段价格之间用;号分开" disabled></textarea></div>
+                            <div><p>描述：</p><textarea placeholder="每段描述之间用英文;号隔开" disabled></textarea></div>
+                            <div><p>价格：</p><textarea placeholder="每段价格之间用英文;号隔开" disabled></textarea></div>
                             <div><button>修改</button><button>保存</button><button>删除</button></div>
                         </li>
                     `;
@@ -447,8 +456,8 @@ async function nextpost(publicKeyF,privateKeyE){
                         html9+=`
                             <li>
                                 <div><p>类别：</p><select disabled></select></div>
-                                <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled>${item.content}</textarea></div>
-                                <div><p>价格：</p><textarea placeholder="每段价格之间用;号分开" disabled>${item.price}</textarea></div>
+                                <div><p>描述：</p><textarea placeholder="每段描述之间用英文;号隔开" disabled>${item.content}</textarea></div>
+                                <div><p>价格：</p><textarea placeholder="每段价格之间用英文;号隔开" disabled>${item.price}</textarea></div>
                                 <div><button>修改</button><button>保存</button><button>删除</button></div>
                             </li>
                         `;
@@ -486,7 +495,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 <div><p>序号：</p><input type="text" value="" disabled></div>
                 <div><p>机构：</p><input type="text" value="" disabled></div>
                 <div><p>外链：</p><input type="text" value="" disabled></div>
-                <div><p>有效期：</p><input type="text" value="" disabled></div>
+                <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" value="" disabled></div>
                 <div><button>修改</button><button>保存</button><button>删除</button></div>
             `;
             let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li")[0];
@@ -576,7 +585,7 @@ async function nextpost(publicKeyF,privateKeyE){
             newLI.innerHTML=`
                 <div><p>归属：</p><select disabled>${html7}</select></div>
                 <div><p>账户类别：</p><select disabled>${html11}</select></div>
-                <div><p>有效期：</p><input type="text" disabled></div>
+                <div><p>有效期：</p><input placeholder="举例：2027/12/30" type="text" disabled></div>
                 <div><button>修改</button><button>保存</button><button>删除</button></div>
             `;
             let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(6)>ul>li")[0];
@@ -594,8 +603,8 @@ async function nextpost(publicKeyF,privateKeyE){
             const html11=`<option value="subscription">subscription</option><option value="lifetime">lifetime</option><option value="trial">trial</option><option value="free">free</option><option value="donate">donate</option>`;
             newLI.innerHTML=`
                 <div><p>归属：</p><select disabled>${html11}</select></div>                
-                <div><p>描述：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
-                <div><p>价格：</p><textarea placeholder="每段描述之间用;号分开" disabled></textarea></div>
+                <div><p>描述：</p><textarea placeholder="每段描述之间用英文;号隔开" disabled></textarea></div>
+                <div><p>价格：</p><textarea placeholder="每段描述之间用英文;号隔开" disabled></textarea></div>
                 <div><button>修改</button><button>保存</button><button>删除</button></div>
             `;
             let oldLI=document.querySelectorAll(".main>.buttab3>div:nth-child(7)>ul>li")[0];
@@ -610,7 +619,7 @@ async function nextpost(publicKeyF,privateKeyE){
     let payobj={payname:"",payimg:"",payurl:""};
     let memberobj={usernum:"",type:"",expires:""};
     let typesobj={typename:"",content:"",price:""};
-    let userobj={usernum:"",auth:""};
+    let userobj={usernum:"",auth:"",token_time:0};
     let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0,user_index=0;
     const reg=/select|update|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|union|and| or |--|\'|\"/i;
     function nextinputvalue(){        
@@ -743,6 +752,16 @@ async function nextpost(publicKeyF,privateKeyE){
                     typesobj.typename="";typesobj.content="";typesobj.price="";
                 }
                 typesobj.price=this.value;
+            }
+        })
+        document.querySelectorAll(".main>.buttab3>div:nth-child(8)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(3)>input").oninput=function(e){
+                e.stopPropagation();
+                if(index!==user_index){
+                    user_index=index;
+                    userobj.usernum="";userobj.auth="";userobj.token_time=0;
+                }
+                userobj.token_time=Math.floor(Date.parse(this.value)/1000);
             }
         })
     }
@@ -1220,26 +1239,27 @@ async function nextpost(publicKeyF,privateKeyE){
             item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
                 e.stopPropagation();
                 item.querySelector("div:nth-child(2)>select").disabled=false;
+                item.querySelector("div:nth-child(3)>input").disabled=false;
                 item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
                     e.stopPropagation();
                     if(index!==user_index){
                         user_index=index;
-                        userobj.usernum="";userobj.auth="";
+                        userobj.usernum="";userobj.auth="";userobj.token_time="";
                     }
                     userobj.usernum=item.querySelector("div:nth-child(1)>input").value;
                     userobj.auth=item.querySelector("div:nth-child(2)>select").value;
-                    if(!userobj.usernum||!userobj.auth)return alert("信息未填全")
+                    if(!userobj.usernum||!userobj.auth||!userobj.token_time)return alert("信息未填全")
                     const pathurl="/api/protected/adddelrest_user";
                     const requestData={
                         username:JSON.parse(usernum).username,
                         password:"",
                         token:"",
-                        message:typepost+"(ASD)"+userobj.usernum+"(ASD)"+userobj.auth,
+                        message:typepost+"(ASD)"+userobj.usernum+"(ASD)"+userobj.auth+"(ASD)"+userobj.token_time,
                         nonce:""
                     };
                     const nonce11 = generateRandom6Digits(); 
                     requestData.nonce=nonce11;
-                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const timestamp11 = Math.floor(Date.now()/1000).toString();
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
                     postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                 }
@@ -1253,6 +1273,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 "Content-Type":"application/json",
                 'x-request-nonce': nonce0,
                 'x-request-timestamp': timestamp0,
+                'Authorization': `Bearer ${custtoken}`,
             },
             body:JSON.stringify({encrypted:encrypted0,message:message})
         }).then(response=>{
@@ -1285,6 +1306,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 headers:{
                     'x-request-nonce': nonce2,
                     'x-request-timestamp': timestamp2,
+                    'Authorization': `Bearer ${custtoken}`,
                 },
                 body: formData // 不要手動設定 Content-Type，瀏覽器會自動處理 multipart/form-data
             });
