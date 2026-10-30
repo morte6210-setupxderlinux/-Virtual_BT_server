@@ -66,7 +66,7 @@ async function nextpost(publicKeyF,privateKeyE){
         console.log(err);
         window.location.href=clientUrl+"/admin";
     })
-    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],types=[],typepost="rest";console.log(items)
+    let items=[],adlist=[],custemail=[],custcode=[],proaccount=[],paylist=[],memberlist=[],types=[],userlist=[],typepost="rest";
     async function nextimage(){
         const requestData={
             username:JSON.parse(usernum).username,
@@ -134,10 +134,10 @@ async function nextpost(publicKeyF,privateKeyE){
                 throw new Error(`HTTP 错误！状态码：${response.status}`)
             }
             return response.json();
-        }).then(data=>{console.log(data)
+        }).then(data=>{
             if(data.success&&data.usernum===JSON.parse(usernum).username){
                 const newObj=data.newObj;
-                let html1="",html2="",html3="",html4="",html5="",html6="",html7="",html8="",html9=""; 
+                let html1="",html2="",html3="",html4="",html5="",html6="",html7="",html8="",html9="",html10=""; 
                 adlist.push(...newObj.adlist);
                 custemail.push(...newObj.custemail);
                 custcode.push(...newObj.custcode);
@@ -145,6 +145,7 @@ async function nextpost(publicKeyF,privateKeyE){
                 paylist.push(...newObj.paylist);
                 memberlist.push(...newObj.memberlist);
                 types.push(...newObj.types);
+                userlist.push(...newObj.userlist);
                 if(newObj.userlist.length<1){
                     html7=`
                         <option></option>
@@ -154,6 +155,21 @@ async function nextpost(publicKeyF,privateKeyE){
                         html7+=`
                             <option value="${item.username}">${item.username}</option>
                         `;
+                        html10+=`
+                            <li>
+                                <div><p>账户：</p><input type="text" value="${item.username}" disabled></div>
+                                <div><p>状态：</p><select disabled><option value="yes">yes</option><option value="no">no</option></select></div>
+                                <div><button>修改</button><button>保存</button></div>
+                            </li>
+                        `;
+                        if((index+1)===newObj.userlist.length){
+                            document.querySelector(".main>.buttab3>div:nth-child(8)>ul").innerHTML=html10;
+                            document.querySelectorAll(".main>.buttab3>div:nth-child(10)>ul>li").forEach((item1,index1)=>{
+                                item1.querySelectorAll("div:nth-child(2)>select>option").forEach((item3)=>{
+                                    if(item3.value===newObj.userlist[index1].auth)item3.selected=true;
+                                })
+                            })
+                        }
                     })
                 }  
                 if(items.length<1){
@@ -424,7 +440,7 @@ async function nextpost(publicKeyF,privateKeyE){
         })
     }
     function nextsetdata(html7,html8){ 
-        nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();nexttypes();nextinputvalue();
+        nextadlink();nextcustemail();nextcustcode();nextproaccount();nextpaylist();nextmember();nexttypes();nextuser();nextinputvalue();
         document.querySelector(".main>.buttab3>div:nth-child(1)>.hdiv>button").onclick=function(e){
             e.stopPropagation();
             if(!adlist[0]){
@@ -564,7 +580,8 @@ async function nextpost(publicKeyF,privateKeyE){
     let payobj={payname:"",payimg:"",payurl:""};
     let memberobj={usernum:"",type:"",expires:""};
     let typesobj={typename:"",content:"",price:""};
-    let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0;
+    let userobj={usernum:"",auth:""};
+    let adlink_index=0,email_index=0,custcode_index=0,account_index=0,pay_index=0,member_index=0,types_index=0,user_index=0;
     const reg=/select|update|delete|insert|trancate|char|into|substr|ascii|declare|exec|count|master|into|drop|execute|union|and| or |--|\'|\"/i;
     function nextinputvalue(){        
         document.querySelectorAll(".main>.buttab3>div:nth-child(1)>ul>li").forEach((item,index)=>{
@@ -744,31 +761,31 @@ async function nextpost(publicKeyF,privateKeyE){
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
                     postserver(pathurl,nonce11,timestamp11,encrypted11,"","",message)
                 }
-                item.querySelector("div:nth-child(8)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(1)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理"); 
-                        }                    
+            }
+            item.querySelector("div:nth-child(8)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)>div:nth-child(6)>input").value&&adlist[0].linkUrl){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(1)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(1)>ul>li:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_adlink";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelector("div:nth-child(1)>input").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(1)>ul"),""); 
-                    }                       
-                }
+                        return alert("有空白表单未处理"); 
+                    }                    
+                }else{
+                    const pathurl="/api/protected/adddelrest_adlink";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)(ASD)"+item.querySelector("div:nth-child(1)>input").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(1)>ul"),""); 
+                }                       
             }
         })
     };
@@ -803,33 +820,33 @@ async function nextpost(publicKeyF,privateKeyE){
                     requestData.nonce=nonce11;
                     const timestamp11 = Math.floor(Date.now() / 1000).toString();
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                 }
-                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(2)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理");
-                        }                      
+            }
+            item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custemail[0].enumber){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(2)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(2)>ul>li>:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_email";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(2)>ul"));
-                    }                        
-                }
+                        return alert("有空白表单未处理");
+                    }                      
+                }else{
+                    const pathurl="/api/protected/adddelrest_email";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(2)>ul"),"");
+                }                        
             }
         })
     };
@@ -868,35 +885,35 @@ async function nextpost(publicKeyF,privateKeyE){
                             requestData.nonce=nonce11;
                             const timestamp11 = Math.floor(Date.now() / 1000).toString();
                             const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                         }
                     })                            
                 }
-                item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(3)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理");
-                        }                        
+            }
+            item.querySelector("div:nth-child(3)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&custcode[0].codeimg){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(3)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(3)>ul>li>:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_code";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(3)>ul")); 
-                    }                       
-                }
+                        return alert("有空白表单未处理");
+                    }                        
+                }else{
+                    const pathurl="/api/protected/adddelrest_code";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(3)>ul"),""); 
+                }                       
             }
         })
     };
@@ -938,35 +955,35 @@ async function nextpost(publicKeyF,privateKeyE){
                             requestData.nonce=nonce11;
                             const timestamp11 = Math.floor(Date.now() / 1000).toString();
                             const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                         }
                     })
                 }
-                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(4)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理");
-                        }                        
+            }
+            item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&proaccount[0].proimg){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(4)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(4)>ul>li>:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_account";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(4)>ul")); 
-                    }                       
-                }
+                        return alert("有空白表单未处理");
+                    }                        
+                }else{
+                    const pathurl="/api/protected/adddelrest_account";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(4)>ul"),""); 
+                }                       
             }
         })
     };
@@ -1008,35 +1025,35 @@ async function nextpost(publicKeyF,privateKeyE){
                             requestData.nonce=nonce11;
                             const timestamp11 = Math.floor(Date.now() / 1000).toString();
                             const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","")
+                            postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                         }
                     })
                 }
-                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(5)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)"));
-                        }else{    
-                            return alert("有空白表单未处理");
-                        }                        
-                    }else{
-                        const pathurl="/api/protected/adddelrest_pay";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(5)>ul")); 
-                    }                       
-                }
+            }
+            item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li:nth-child(1)>div:nth-child(2)>input").value&&paylist[0].payimg){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(5)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(5)>ul>li>:nth-child(1)"));
+                    }else{    
+                        return alert("有空白表单未处理");
+                    }                        
+                }else{
+                    const pathurl="/api/protected/adddelrest_pay";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(5)>ul"),""); 
+                }                       
             }
         })
     };
@@ -1076,31 +1093,31 @@ async function nextpost(publicKeyF,privateKeyE){
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
                     postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                 }
-                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li:nth-child(1)>div:nth-child(3)>input").value&&memberlist[0].expires){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(6)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理");
-                        }
+            }
+            item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li:nth-child(1)>div:nth-child(3)>input").value&&memberlist[0].expires){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(6)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(6)>ul>li>:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_member";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(6)>ul"),"");
-                    }                        
-                }
+                        return alert("有空白表单未处理");
+                    }
+                }else{
+                    const pathurl="/api/protected/adddelrest_member";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(6)>ul"),"");
+                }                        
             }
         })
     };
@@ -1140,30 +1157,61 @@ async function nextpost(publicKeyF,privateKeyE){
                     const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
                     postserver(pathurl,nonce11,timestamp11,encrypted11,"","",message)
                 }
-                item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
-                    e.stopPropagation();
-                    if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li:nth-child(1)>div:nth-child(3)>textarea").value&&types[0].price){
-                        typepost="rest";
-                        if(index===0){
-                            document.querySelector(".main>.buttab3>div:nth-child(7)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)"));
-                        }else{
-                            return alert("有空白表单未处理");
-                        }
+            }
+            item.querySelector("div:nth-child(4)>button:nth-child(3)").onclick=async function(e){
+                e.stopPropagation();
+                if(!document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li:nth-child(1)>div:nth-child(3)>textarea").value&&types[0].price){
+                    typepost="rest";
+                    if(index===0){
+                        document.querySelector(".main>.buttab3>div:nth-child(7)>ul").removeChild(document.querySelector(".main>.buttab3>div:nth-child(7)>ul>li>:nth-child(1)"));
                     }else{
-                        const pathurl="/api/protected/adddelrest_types";
-                        const requestData={
-                            username:JSON.parse(usernum).username,
-                            password:"",
-                            token:"",
-                            message:"del(ASD)"+item.querySelectorAll("div:nth-child(1)>select").value,
-                            nonce:""
-                        };
-                        const nonce11 = generateRandom6Digits(); 
-                        requestData.nonce=nonce11;
-                        const timestamp11 = Math.floor(Date.now() / 1000).toString();
-                        const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
-                        postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(7)>ul"));                        
+                        return alert("有空白表单未处理");
                     }
+                }else{
+                    const pathurl="/api/protected/adddelrest_types";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:"del(ASD)"+item.querySelector("div:nth-child(1)>select").value,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,item,document.querySelector(".main>.buttab3>div:nth-child(7)>ul"),"");                        
+                }
+            }
+        })
+    }
+    function nextuser(){
+        document.querySelectorAll(".main>.buttab3>div:nth-child(8)>ul>li").forEach((item,index)=>{
+            item.querySelector("div:nth-child(3)>button:nth-child(1)").onclick=function(e){
+                e.stopPropagation();
+                item.querySelector("div:nth-child(2)>select").disabled=false;
+                item.querySelector("div:nth-child(3)>button:nth-child(2)").onclick=async function(e){
+                    e.stopPropagation();
+                    if(index!==user_index){
+                        user_index=index;
+                        userobj.usernum="";userobj.auth="";
+                    }
+                    userobj.usernum=item.querySelector("div:nth-child(1)>input").value;
+                    userobj.auth=item.querySelector("div:nth-child(2)>select").value;
+                    if(!userobj.usernum||!userobj.auth)return alert("信息未填全")
+                    const pathurl="/api/protected/adddelrest_user";
+                    const requestData={
+                        username:JSON.parse(usernum).username,
+                        password:"",
+                        token:"",
+                        message:typepost+"(ASD)"+userobj.usernum+"(ASD)"+userobj.auth,
+                        nonce:""
+                    };
+                    const nonce11 = generateRandom6Digits(); 
+                    requestData.nonce=nonce11;
+                    const timestamp11 = Math.floor(Date.now() / 1000).toString();
+                    const encrypted11=await encryptflare(publicKeyF,JSON.stringify(requestData));
+                    postserver(pathurl,nonce11,timestamp11,encrypted11,"","","")
                 }
             }
         })
