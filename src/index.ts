@@ -46,6 +46,7 @@ async function initializeDatabase(db: D1Database) {
         UUID TEXT NOT NULL,
         username TEXT NOT NULL,
         password_hash TEXT NOT NULL,
+        auth TEXT NOT NULL,
         publicid TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -635,9 +636,9 @@ app.post('/api/auth/userregister', deviceSecurityMiddleware, deviceauthMiddlewar
             ).bind(usernum).first();
             if (!adminname||!adminname.adminname) {
                 const result = await c.env.DB.prepare(
-                  'INSERT INTO users (username, password_hash,UUID,publicid) VALUES (?,?,?,?)'
+                  'INSERT INTO users (username, password_hash,UUID,auth,publicid) VALUES (?,?,?,?,?)'
                 )
-                .bind(usernum, passwordHash,UUID,"758805")
+                .bind(usernum, passwordHash,UUID,"yes","758805")
                 .run()
                 return c.json({ success: true, userId: result.meta.last_row_id }, 201)
             }else{
@@ -928,7 +929,7 @@ app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, 
       .bind(usernum, passwordHash,UUID)
       .first()
     
-    if (!user) {
+    if (!user||user.auth==="no") {
       return c.json({ error: 'Invalid username or password' }, 401)
     }
     // 2. 簽署生成 JWT Token (設定 24 小時後過期)
@@ -1573,7 +1574,7 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
     try{
       const user = c.get('jwtPayload');
       const usernum = c.get('usernum')
-      const message=c.get("message");console.log(message)
+      const message=c.get("message");
       const adminobj: any = await c.env.DB.prepare(
         'SELECT * FROM admin WHERE adminname = ?'
       )
@@ -1581,7 +1582,7 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
       if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
       const res = await c.env.DB.prepare(
           'SELECT * FROM ADlink WHERE urlId = ?'
-      ).bind(message.split("(ASD)")[3]).first();
+      ).bind(message.split("(ASD)")[2]).first();
       if(!res||!res.urlId){  
         if(message.split("(ASD)")[0]==="add"){
           const result = await c.env.DB.prepare(
@@ -1628,7 +1629,7 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
   try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const message=c.get("message")
+    const message=c.get("message");
     const adminobj: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
@@ -1683,7 +1684,7 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
   try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const message=c.get("message");console.log(message)
+    const message=c.get("message");
     const adminobj: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
     )
@@ -1972,6 +1973,45 @@ app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, 
             success: true, 
           })
       }
+    }
+  } catch (err: any) {console.log(err)
+    // 4. 捕獲並返回異常錯誤
+    return c.json({ 
+      success: false, 
+      error: err.message || 'Internal Server Error' 
+    }, 500)
+  }
+})
+//管理端修改用户权限
+app.post("/api/protected/adddelrest_user", securityMiddleware, authMiddleware, async (c)=>{
+  try{
+    const user = c.get('jwtPayload')
+    const usernum = c.get('usernum')
+    const message=c.get("message")
+    const adminobj: any = await c.env.DB.prepare(
+      'SELECT * FROM admin WHERE adminname = ?'
+    )
+    .bind(user.username).first()
+    if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const res = await c.env.DB.prepare(
+        'SELECT * FROM users WHERE username = ?'
+    ).bind(message.split("(ASD)")[1]).first();
+    if(res&&res.username){
+      if(message.split("(ASD)")[0]==="rest"){
+        const result = await c.env.DB.prepare(
+          'UPDATE users SET auth = ? WHERE username = ?'
+        )
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
+        .run()
+        return c.json({ 
+            success: true, 
+          })
+      }
+    }else{
+      return c.json({ 
+            success: false, 
+          })
+      
     }
   } catch (err: any) {console.log(err)
     // 4. 捕獲並返回異常錯誤

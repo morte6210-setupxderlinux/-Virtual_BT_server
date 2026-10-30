@@ -91,7 +91,7 @@ export const securityMiddleware = async (c: Context, next: Next) => {
     // 通過所有檢查，放行
     return await next();
 
-  } catch (err: any) {
+  } catch (err: any) {console.log(err)
     return c.json({ success: false, error: 'Security middleware internal error: ' + err.message }, 500);
   }
 };
