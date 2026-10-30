@@ -1,5 +1,5 @@
 const config={
-    clientUrl:"http://localhost:3000",
-    serverUrl:"http://127.0.0.1:8787",
-    imgUrl:"http://127.0.0.1:8787"
+    clientUrl:"https://cf-backend.setupxderlinux.workers.dev",//更换为你的
+    serverUrl:"https://cf-backend.setupxderlinux.workers.dev",//更换为你的
+    imgUrl:"https://cf-backend.setupxderlinux.workers.dev"//更换为你的
 }
