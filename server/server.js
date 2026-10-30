@@ -139,7 +139,7 @@ async function getopencode(){
       if(result.success&&result.cloudflareResponse.usernum===requestBody.username&&result.cloudflareResponse.fnsum&&result.cloudflareResponse.signatureBase64){
           //fnsum: encrypted,//随机数加密
           //usernum:usernum,//用户
-          //signatureBase64:signatureBase64//usernum+fnsum签章
+          //signatureBase64:signatureBase64//签章usernum+fnsum
       }
     } catch (err) {console.log(err)
       console.error('請求 Cloudflare 失敗:', err.message);

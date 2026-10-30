@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { jwt, sign } from 'hono/jwt'
 import {cors} from "hono/cors"
-import {getCookie} from "hono/cookie"
+import {getCookie,setCookie} from "hono/cookie"
 import { securityMiddleware } from './securityMiddleware'
 import { authMiddleware } from './authMiddleware'; 
 import {deviceSecurityMiddleware} from './deviceSecurityMiddleware';
@@ -63,6 +63,8 @@ async function initializeDatabase(db: D1Database) {
         publicid TEXT NOT NULL,
         adminname TEXT NOT NULL,
         password TEXT NOT NULL,
+        token TEXT NOT NULL,
+        token_time DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -150,6 +152,7 @@ async function initializeDatabase(db: D1Database) {
           xuhao TEXT NOT NULL,
           postname TEXT NOT NULL,
           linkUrl TEXT NOT NULL,
+          publicid TEXT NOT NULL,
           expritime DATETIME,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -336,9 +339,9 @@ async function addadminname(db: D1Database){
   const password=adminconfig.password;
   const encrypted=await encryptflare(publicKeyPem,password);
   const result=await db.prepare(
-    'INSERT INTO admin (adminname, password,publicid) VALUES (?,?,?)'
+    'INSERT INTO admin (adminname, password,token,token_time,publicid) VALUES (?,?,?,?,?)'
   )
-  .bind(usernum, encrypted,"758805")
+  .bind(usernum, encrypted,"1",Math.floor(Date.now()/1000),"758805")
   .run()
   return result
 }
@@ -585,7 +588,6 @@ async function setupsignvrifig(db: D1Database,userId: Number,message: string){
     return false
   } 
 }
-
 // ----------------------------------------------------
 // 1. 公開路由 (Auth: 註冊與登入)
 // ----------------------------------------------------
@@ -951,7 +953,7 @@ app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, 
     }
     const publicKeyPem = sysKeys.public_keyE as string;
     const encrypted=await encryptflare(publicKeyPem,token);
-    const result = await c.env.DB.prepare(
+    await c.env.DB.prepare(
       'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
     )
     .bind(token,time,usernum)
@@ -982,7 +984,7 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
         return c.json({ error: 'key not found' }, 400)
     }
     const publicKeyPem1 = sysKeys.public_keyF as string;
-      const passwordHash = await encryptflare(publicKeyPem1,password);
+    const passwordHash = await encryptflare(publicKeyPem1,password);
     // 1. 驗證用戶帳號與密碼
     const user: any = await c.env.DB.prepare(
       'SELECT * FROM admin WHERE adminname = ?'
@@ -993,17 +995,24 @@ app.post('/api/auth/adminlogin', securityMiddleware, authMiddleware, async (c) =
       return c.json({ error: 'Invalid adminname or password' }, 401)
     }
     
+    const time=Math.floor(Date.now()/1000) + 60 * 60 * 2; // 2 hours
     // 2. 簽署生成 JWT Token (設定 24 小時後過期)
     const payload = {
       id: user.id,
       username: user.adminname,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 2 // 2 hours
+      exp: time
     }
     const token = await sign(payload, c.env.JWT_SECRET);
-    // 設定 token，有效時間為 2 小時 (7200 秒)
-    c.header('Set-Cookie', `token=${token}; HttpOnly; Path=/; Max-Age=7200; Secure; SameSite=Strict`);
+    const publicKeyPem = sysKeys.public_keyE as string;
+    const encrypted = await encryptflare(publicKeyPem,token);
+    await c.env.DB.prepare(
+      'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+    )
+    .bind(token,time,usernum)
+    .run()
     return c.json({
       success: true,
+      token:encrypted,
       adminname: user.adminname
     })
   } catch (err: any) {
@@ -1046,17 +1055,6 @@ app.get('/files/*', async (c) => {
 // 2. 註冊 JWT 鑑權中間件 (保護所有以 /api/protected/* 開頭的路由)
 // ----------------------------------------------------
 app.use('/api/protected/*', (c, next) => {
-  // 1. 優先從 Cookie 拿，沒有的話再從 Authorization 拿
-  let token = getCookie(c, 'token') || c.req.header('Authorization');
-
-  // 2. 如果是從 Authorization 拿到的，可能包含 "Bearer " 字串，保險起見可以清一下或直接帶入
-  if (token && token.startsWith('Bearer ')) {
-    token = token.split(' ')[1];
-  }
-  if (token) {
-    // 3. 塞回 houno/jwt 預期接收的標準格式
-    c.req.raw.headers.set('Authorization', `Bearer ${token}`);
-  }
   const jwtMiddleware = jwt({
     secret: c.env.JWT_SECRET,
     alg:"HS256"
@@ -1155,9 +1153,12 @@ app.post('/api/protected/loginout', securityMiddleware, authMiddleware, async (c
     const admin = c.get('jwtPayload')
     const usernum = c.get('usernum');
     if(!usernum||usernum!==admin.username)return c.json({ error: 'Invalid username' },401)
-    
-    // 將 Max-Age 設為 0，讓瀏覽器立刻刪除該 Cookie
-    c.header('Set-Cookie', 'token=; HttpOnly; Path=/; Max-Age=0; Secure; SameSite=Strict');
+    const time=Math.floor(Date.now()/1000);
+    await c.env.DB.prepare(
+      'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+    )
+    .bind("1",time,usernum)
+    .run()
     return c.json({
       success: true,
       adminname: admin.username
@@ -1180,7 +1181,7 @@ app.post("/api/protected/device/opensign", deviceSecurityMiddleware, deviceauthM
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
-    const time=Math.floor(Date.now() / 1000);
+    const time=Math.floor(Date.now()/1000);
     const token=c.req.header('Authorization') as string;
     if(deviceId.token&&deviceId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
     if(deviceId.token_time<time){
@@ -1515,12 +1516,23 @@ app.post("/api/protected/findlink", securityMiddleware, authMiddleware, async (c
       types: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-    //const res1 = await c.env.DB.prepare(
-    //    'SELECT * FROM ADlink WHERE publicid = ? ORDER BY created_at DESC'
-    //).bind("758805").all();    
+    const adminId: any = await c.env.DB.prepare(
+        'SELECT * FROM admin WHERE adminname = ?'
+    ).bind(usernum).first(); 
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminId.token&&adminId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }  
     const res1 = await c.env.DB.prepare(
-      'SELECT * FROM ADlink ORDER BY created_at DESC'
-    ).all()
+      'SELECT * FROM ADlink WHERE publicid = ? ORDER BY created_at DESC'
+    ).bind("758805").all()
     const res2 = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE publicid = ? ORDER BY created_at DESC'
     ).bind("758805").all();
@@ -1576,7 +1588,20 @@ app.post("/api/protected/findimage", securityMiddleware, authMiddleware, async (
       items: []
     };
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
-        
+       const adminId: any = await c.env.DB.prepare(
+            'SELECT * FROM admin WHERE adminname = ?'
+        ).bind(usernum).first(); 
+        const time=Math.floor(Date.now()/1000);
+        const token=c.req.header('Authorization') as string;
+        if(adminId.token&&adminId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+        if(adminId.token_time<time){
+          await c.env.DB.prepare(
+            'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+          )
+          .bind("1",time,usernum)
+          .run()
+          return c.json({ error: 'Invalid token_time' },401)
+        }   
       let results=[];
       if (message) {
         // 2. 如果有提供關鍵字，使用帶有模糊查詢（LIKE）的參數化語句，防止 SQL 注入
@@ -1626,7 +1651,17 @@ app.post('/api/protected/upload', securityMiddleware, async (c) => {
     )
     .bind(user.username).first()
     if(!user_id||parseInt(user_id)!==user.id||!adminobj)return c.json({ error: 'Invalid adminname' },401)
-    
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }  
     const body = await c.req.parseBody()
     const file = body['file'] as File
 
@@ -1673,15 +1708,26 @@ app.post("/api/protected/adddelrest_adlink", securityMiddleware, authMiddleware,
       )
       .bind(user.username).first()
       if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+      const time=Math.floor(Date.now()/1000);
+      const token=c.req.header('Authorization') as string;
+      if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+      if(adminobj.token_time<time){
+        await c.env.DB.prepare(
+          'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+        )
+        .bind("1",time,user.username)
+        .run()
+        return c.json({ error: 'Invalid token_time' },401)
+      }
       const res = await c.env.DB.prepare(
           'SELECT * FROM ADlink WHERE urlId = ?'
       ).bind(message.split("(ASD)")[2]).first();
       if(!res||!res.urlId){  
         if(message.split("(ASD)")[0]==="add"){
           const result = await c.env.DB.prepare(
-            'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime) VALUES (?,?,?,?,?,?,?)'
+            'INSERT INTO ADlink (usernum,urlId,title,xuhao,postname,linkUrl,expritime,publicid) VALUES (?,?,?,?,?,?,?,?)'
           )
-          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],decodeURIComponent(message.split("(ASD)")[3]),message.split("(ASD)")[4],decodeURIComponent(message.split("(ASD)")[5]),encodeURIComponent(message.split("(ASD)")[6]),message.split("(ASD)")[7])
+          .bind(message.split("(ASD)")[1],message.split("(ASD)")[2],decodeURIComponent(message.split("(ASD)")[3]),message.split("(ASD)")[4],decodeURIComponent(message.split("(ASD)")[5]),encodeURIComponent(message.split("(ASD)")[6]),message.split("(ASD)")[7],"")
           .run()
           return c.json({ 
             success: true, 
@@ -1728,6 +1774,17 @@ app.post("/api/protected/adddelrest_email", securityMiddleware, authMiddleware, 
     )
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const res = await c.env.DB.prepare(
         'SELECT * FROM custemail WHERE typename = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1783,6 +1840,17 @@ app.post("/api/protected/adddelrest_code", securityMiddleware, authMiddleware, a
     )
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const res = await c.env.DB.prepare(
         'SELECT * FROM custcode WHERE codename = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1838,6 +1906,17 @@ app.post("/api/protected/adddelrest_account", securityMiddleware, authMiddleware
       )
       .bind(user.username).first()
       if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+      const time=Math.floor(Date.now()/1000);
+      const token=c.req.header('Authorization') as string;
+      if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+      if(adminobj.token_time<time){
+        await c.env.DB.prepare(
+          'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+        )
+        .bind("1",time,user.username)
+        .run()
+        return c.json({ error: 'Invalid token_time' },401)
+      }
       const res = await c.env.DB.prepare(
           'SELECT * FROM proaccount WHERE proname = ?'
       ).bind(message.split("(ASD)")[1]).first();
@@ -1893,6 +1972,17 @@ app.post("/api/protected/adddelrest_pay", securityMiddleware, authMiddleware, as
     )
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const res = await c.env.DB.prepare(
         'SELECT * FROM paylist WHERE payname = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -1948,6 +2038,17 @@ app.post("/api/protected/adddelrest_member", securityMiddleware, authMiddleware,
     )
     .bind(user.username).first();
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE username = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -2031,6 +2132,17 @@ app.post("/api/protected/adddelrest_types", securityMiddleware, authMiddleware, 
     )
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const res = await c.env.DB.prepare(
         'SELECT * FROM typepays WHERE typename = ?'
     ).bind(message.split("(ASD)")[1]).first();
@@ -2086,24 +2198,35 @@ app.post("/api/protected/adddelrest_user", securityMiddleware, authMiddleware, a
     )
     .bind(user.username).first()
     if(!usernum||usernum!==user.username||!adminobj)return c.json({ error: 'Invalid username' },401)
+    const time=Math.floor(Date.now()/1000);
+    const token=c.req.header('Authorization') as string;
+    if(adminobj.token&&adminobj.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(adminobj.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE admin SET token = ?,token_time = ? WHERE adminname = ?'
+      )
+      .bind("1",time,user.username)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     const res = await c.env.DB.prepare(
         'SELECT * FROM users WHERE username = ?'
     ).bind(message.split("(ASD)")[1]).first();
     if(res&&res.username){
       if(message.split("(ASD)")[0]==="rest"){
         const result = await c.env.DB.prepare(
-          'UPDATE users SET auth = ? WHERE username = ?'
+          'UPDATE users SET auth = ?,token_time = ? WHERE username = ?'
         )
-        .bind(message.split("(ASD)")[2],message.split("(ASD)")[1])
+        .bind(message.split("(ASD)")[2],message.split("(ASD)")[3],message.split("(ASD)")[1])
         .run()
         return c.json({ 
             success: true, 
-          })
+        })
       }
     }else{
       return c.json({ 
             success: false, 
-          })
+      })
       
     }
   } catch (err: any) {console.log(err)
