@@ -48,6 +48,8 @@ async function initializeDatabase(db: D1Database) {
         username TEXT NOT NULL,
         password_hash TEXT NOT NULL,
         auth TEXT NOT NULL,
+        token TEXT NOT NULL,
+        token_time DATETIME,
         publicid TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -637,9 +639,9 @@ app.post('/api/auth/userregister', deviceSecurityMiddleware, deviceauthMiddlewar
             ).bind(usernum).first();
             if (!adminname||!adminname.adminname) {
                 const result = await c.env.DB.prepare(
-                  'INSERT INTO users (username, password_hash,UUID,auth,publicid) VALUES (?,?,?,?,?)'
+                  'INSERT INTO users (username, password_hash,UUID,auth,token,token_time,publicid) VALUES (?,?,?,?,?,?,?)'
                 )
-                .bind(usernum, passwordHash,UUID,"yes","758805")
+                .bind(usernum, passwordHash,UUID,"yes","1",Math.floor(Date.now()/1000),"758805")
                 .run()
                 return c.json({ success: true, userId: result.meta.last_row_id }, 201)
             }else{
@@ -753,7 +755,7 @@ app.post('/api/public/findkey', securityMiddleware, async (c) => {
   }
 })
 // 用户获取付款分类描述
-app.post('/api/auth/device/payselect', deviceSecurityMiddleware,deviceauthMiddleware, async (c) => {
+app.post('/api/auth/device/payselect', securityMiddleware,authMiddleware, async (c) => {
   try {
     const body = await c.req.json();
     const nonce = c.req.header('x-request-nonce');
@@ -934,10 +936,11 @@ app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, 
       return c.json({ error: 'Invalid username or password' }, 401)
     }
     // 2. 簽署生成 JWT Token (設定 24 小時後過期)
+    const time=Math.floor(Date.now() / 1000) + 60 * 60 * 2;// 2 hours
     const payload = {
       id: user.id,
       username: user.username,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 2 // 2 hours
+      exp: time
     }
     const token = await sign(payload, c.env.JWT_SECRET);
     const sysKeys: any = await c.env.DB.prepare(
@@ -948,6 +951,11 @@ app.post('/api/auth/userlogin', deviceSecurityMiddleware, deviceauthMiddleware, 
     }
     const publicKeyPem = sysKeys.public_keyE as string;
     const encrypted=await encryptflare(publicKeyPem,token);
+    const result = await c.env.DB.prepare(
+      'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+    )
+    .bind(token,time,usernum)
+    .run()
     return c.json({
       success: true,
       token:encrypted,
@@ -1167,11 +1175,22 @@ app.post("/api/protected/device/opensign", deviceSecurityMiddleware, deviceauthM
   try{  
     const user = c.get('jwtPayload')
     const usernum = c.get('usernum')
-    const UUID = c.get('UUID')
+    const UUID = c.get('UUID')    
     if(!usernum||usernum!==user.username)return c.json({ error: 'Invalid username' },401)
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
+    const time=Math.floor(Date.now() / 1000);
+    const token=c.req.header('Authorization') as string;
+    if(deviceId.token&&deviceId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(deviceId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
     const dbKeyRecord: any = await c.env.DB.prepare(
         'SELECT * FROM user_keys WHERE user_id = ?'
@@ -1221,6 +1240,17 @@ app.post("/api/protected/device/useraddkey", deviceSecurityMiddleware, deviceaut
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
+    const time=Math.floor(Date.now() / 1000);
+    const token=c.req.header('Authorization') as string;
+    if(deviceId.token&&deviceId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(deviceId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
     const query = 'SELECT * FROM user_keys WHERE user_id = ?'
     const res = await c.env.DB.prepare(query)
@@ -1274,6 +1304,17 @@ app.post("/api/protected/device/findsign", deviceSecurityMiddleware, deviceauthM
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
+    const time=Math.floor(Date.now() / 1000);
+    const token1=c.req.header('Authorization') as string;
+    if(deviceId.token&&deviceId.token!==token1.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(deviceId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
     const signobj: any = await c.env.DB.prepare(
         'SELECT * FROM user_sign WHERE usernum = ?'
@@ -1342,6 +1383,17 @@ app.post("/api/protected/device/findlink", deviceSecurityMiddleware, deviceauthM
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
+    const time=Math.floor(Date.now() / 1000);
+    const token=c.req.header('Authorization') as string;
+    if(deviceId.token&&deviceId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(deviceId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)
       const res1 = await c.env.DB.prepare(
         'SELECT * FROM ADlink WHERE usernum = ? ORDER BY created_at DESC'
@@ -1397,6 +1449,17 @@ app.post("/api/protected/device/findimage", deviceSecurityMiddleware, deviceauth
     const deviceId: any = await c.env.DB.prepare(
         'SELECT * FROM users WHERE UUID = ?'
     ).bind(UUID).first();
+    const time=Math.floor(Date.now() / 1000);
+    const token=c.req.header('Authorization') as string;
+    if(deviceId.token&&deviceId.token!==token.split("Bearer ")[1])return c.json({ error: 'Invalid token' },401)
+    if(deviceId.token_time<time){
+      await c.env.DB.prepare(
+        'UPDATE users SET token = ?,token_time = ? WHERE username = ?'
+      )
+      .bind("1",time,usernum)
+      .run()
+      return c.json({ error: 'Invalid token_time' },401)
+    }
     if(!deviceId||!deviceId.UUID)return c.json({ error: 'Invalid UUID' },401)    
       let results=[];
       if (message) {
@@ -1414,7 +1477,6 @@ app.post("/api/protected/device/findimage", deviceSecurityMiddleware, deviceauth
       }
     
     if(results.length>0)newObj.items.push(...results);
-
     return c.json({
         success: true,
         usernum: user.username,

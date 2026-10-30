@@ -36,7 +36,6 @@ async function register(){
   }
 };//register()
 
-
 //登录 
 async function userlogin(){
   try {
@@ -69,6 +68,7 @@ async function userlogin(){
       
     }
 };//userlogin();
+
 //获取公共密钥
 async function findkey(){
   try {
@@ -86,6 +86,7 @@ async function findkey(){
     
   }
 };//findkey();
+
 //获取验章公钥
 async function usersign(){
   try {
@@ -114,6 +115,37 @@ async function usersign(){
       
     }
 };//usersign();
+
+//获取验章公钥
+async function getopencode(){
+  try {
+      const requestBody = {
+        username: "morte6210@gmail.com",
+        password:"",
+        message:"",
+        UUID:"yuefuuikfmncyirrn6899ugfdj",//应该由设备端代码写入，约定截取真实设备代码生成的UUID前20位
+        nonce:""
+      };
+      const nonce = crypto.randomUUID(); // 隨機數
+      requestBody.nonce=nonce;
+      const timestamp = Math.floor(Date.now()/1000).toString(); // 秒級時間戳
+      const URL=CLOUDFLARE_API_URL+"/api/protected/device/opensign";
+      const token=fs.readFileSync(path.join(__dirname,"./key/token.pem"),"utf-8");
+      const UUID="ingfewrq7343nvbxv5754rgvbdse74njfnpdt4tngfdrueb5348t";//被截取的设备UUID剩余的
+      const encrypted=endesign.encryptWithCloudflarePublicKey(JSON.stringify(requestBody));
+      const encrypted1=endesign.encryptWithCloudflarePublicKey(requestBody.UUID);
+      const result=await postserver(URL,nonce,timestamp,token,encrypted,encrypted1,UUID);
+      console.log(result);
+      if(result.success&&result.cloudflareResponse.usernum===requestBody.username&&result.cloudflareResponse.fnsum&&result.cloudflareResponse.signatureBase64){
+          //fnsum: encrypted,//随机数加密
+          //usernum:usernum,//用户
+          //signatureBase64:signatureBase64//usernum+fnsum签章
+      }
+    } catch (err) {console.log(err)
+      console.error('請求 Cloudflare 失敗:', err.message);
+      
+    }
+};//getopencode();
 
 //查找签章
 async function findsign(){
@@ -188,7 +220,9 @@ async function findlink(){
       console.error('請求 Cloudflare 失敗:', err.message);
       
     }
-};findlink();
+};//findlink();
+
+
 // 啟動本地 Express 伺服器
 const PORT = 3030;
 app.listen(PORT, () => {
